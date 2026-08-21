@@ -31,7 +31,7 @@ const state = {
 };
 
 const elements = {
-  diaryView: document.querySelector("#diary-view"), statsView: document.querySelector("#stats-view"), profileView: document.querySelector("#profile-view"), directoriesView: document.querySelector("#directories-view"), medicationsView: document.querySelector("#medications-view"),
+  diaryView: document.querySelector("#diary-view"), statsView: document.querySelector("#stats-view"), settingsView: document.querySelector("#settings-view"), profileView: document.querySelector("#profile-view"), backupView: document.querySelector("#backup-view"), directoriesView: document.querySelector("#directories-view"), medicationsView: document.querySelector("#medications-view"),
   diaryList: document.querySelector("#diary-list"), diaryFilterSelect: document.querySelector("#diary-filter-select"), loadMore: document.querySelector("#load-more-button"),
   statsContent: document.querySelector("#stats-content"), statsSubfilters: document.querySelector("#stats-subfilters"), statsBack: document.querySelector("#stats-back"),
   statsPeriod: document.querySelector("#stats-period"), customPeriod: document.querySelector("#custom-period"), periodStart: document.querySelector("#period-start"), periodEnd: document.querySelector("#period-end"),
@@ -859,9 +859,17 @@ async function handleMedicationAction(event) {
 }
 
 function switchView(view) {
-  elements.diaryView.hidden = view !== "diary"; elements.statsView.hidden = view !== "stats"; elements.profileView.hidden = view !== "profile"; elements.directoriesView.hidden = view !== "directories"; elements.medicationsView.hidden = view !== "medications";
-  document.querySelectorAll("[data-view]").forEach((button) => { const active = button.dataset.view === view; button.classList.toggle("active", active); if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current"); });
-  if (view === "stats") { state.statsMetric = "overview"; renderStatistics(); } if (view === "profile") renderProfile(); if (view === "directories") { state.activeDirectory = null; renderDirectories(); } if (view === "medications") { state.medicationTab = "today"; state.medicationDate = getMoscowFields().date; renderMedications(); } window.scrollTo({ top: 0, behavior: "smooth" });
+  const views = { diary: elements.diaryView, stats: elements.statsView, settings: elements.settingsView, profile: elements.profileView, backup: elements.backupView, directories: elements.directoriesView, medications: elements.medicationsView };
+  if (!views[view]) return;
+  for (const [name, section] of Object.entries(views)) section.hidden = name !== view;
+  const settingsActive = ["settings", "profile", "backup"].includes(view);
+  document.querySelectorAll("[data-view]").forEach((button) => { const active = button.dataset.view === view || (button.hasAttribute("data-settings-root") && settingsActive); button.classList.toggle("active", active); if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current"); });
+  if (view === "stats") { state.statsMetric = "overview"; renderStatistics(); }
+  if (view === "profile") renderProfile();
+  if (view === "backup") document.querySelector("#data-error").textContent = "";
+  if (view === "directories") { state.activeDirectory = null; renderDirectories(); }
+  if (view === "medications") { state.medicationTab = "today"; state.medicationDate = getMoscowFields().date; renderMedications(); }
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 async function handleImportFile(event) {
@@ -870,7 +878,7 @@ async function handleImportFile(event) {
     const data = await parseBackupFile(event.target.files[0]); const conflicts = await countImportConflicts(data); state.pendingImport = data;
     const summary = [[data.profile ? 1 : 0, "профиль"], [data.pressureMeasurements.length, "давление"], [data.pulseMeasurements.length, "пульс"], [data.painEpisodes.length, "боль"], [data.glucoseMeasurements.length, "глюкоза"], [data.weightMeasurements.length, "вес"], [data.bodyParts.length, "части тела"], [data.medications.length, "лекарства"], [data.medicationCourses.length, "курсы"], [data.medicationIntakes.length, "приёмы"]];
     document.querySelector("#import-summary").replaceChildren(...summary.map(([count, label]) => el("div", {}, [el("strong", { text: String(count) }), el("span", { text: label })])), el("div", { className: "wide" }, [el("strong", { text: String(conflicts) }), el("span", { text: "совпадений ID" })]));
-    closeDialog(document.querySelector("#data-dialog")); openDialog("#import-dialog");
+    openDialog("#import-dialog");
   } catch (error) { showError(errorNode, error); } finally { event.target.value = ""; }
 }
 
@@ -934,6 +942,8 @@ function bindEvents() {
   document.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => closeDialog(button.closest("dialog")))); document.querySelectorAll("dialog").forEach((dialog) => dialog.addEventListener("close", () => queueMicrotask(syncModalState)));
   document.querySelectorAll("dialog.sheet").forEach((dialog) => dialog.addEventListener("click", (event) => { if (event.target === dialog) closeDialog(dialog); }));
   document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view)));
+  document.querySelectorAll("[data-settings-target]").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.settingsTarget)));
+  document.querySelector("#profile-back").addEventListener("click", () => switchView("settings")); document.querySelector("#backup-back").addEventListener("click", () => switchView("settings"));
 
   document.querySelectorAll("[data-medication-tab]").forEach((button) => button.addEventListener("click", () => { state.medicationTab = button.dataset.medicationTab; renderMedications(); }));
   elements.medicationCourseAdd.addEventListener("click", () => openMedicationCourseForm()); elements.medicationsContent.addEventListener("click", handleMedicationAction);
@@ -955,7 +965,6 @@ function bindEvents() {
   elements.statsContent.addEventListener("click", (event) => { const card = event.target.closest("[data-metric]"); if (!card) return; state.statsMetric = card.dataset.metric; renderStatistics(); window.scrollTo({ top: 0, behavior: "smooth" }); });
   elements.statsBack.addEventListener("click", () => { state.statsMetric = "overview"; renderStatistics(); }); elements.statsPeriod.addEventListener("change", () => { elements.customPeriod.hidden = elements.statsPeriod.value !== "custom"; renderStatistics(); }); elements.periodStart.addEventListener("change", renderStatistics); elements.periodEnd.addEventListener("change", renderStatistics);
   elements.statsSubfilters.addEventListener("change", (event) => { if (event.target.id === "glucose-context-filter") state.glucoseContext = event.target.value; if (event.target.id === "glucose-format-filter") state.glucoseFormat = event.target.value; if (event.target.id === "pain-body-part-filter") state.painBodyPart = event.target.value; renderStatistics(); });
-  document.querySelector("#data-menu-button").addEventListener("click", () => openDialog("#data-dialog"));
   document.querySelector("#export-csv").addEventListener("click", async () => { try { if (await exportCsv(state.data)) showToast("CSV подготовлены"); } catch (error) { showError(document.querySelector("#data-error"), error); } });
   document.querySelector("#export-json").addEventListener("click", async () => { try { if (await exportJson(state.data)) { clearBackupPending(); showToast("Резервная копия подготовлена"); } } catch (error) { showError(document.querySelector("#data-error"), error); } });
   document.querySelector("#backup-save").addEventListener("click", savePromptedBackup); document.querySelector("#backup-later").addEventListener("click", postponeBackupPrompt); document.querySelector("#backup-prompt-dialog").addEventListener("cancel", (event) => event.preventDefault());

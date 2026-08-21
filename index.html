@@ -17,8 +17,8 @@
 </head>
 <body>
   <header class="app-header">
-    <div class="brand"><span id="brand-icon-container" class="brand-icon-container" aria-hidden="true"><img class="brand-icon" src="./icons/icon-192.png" alt=""><span class="brand-emoji" hidden></span></span><div><p class="eyebrow">Дневник здоровья · <button id="app-version" class="app-version" type="button" disabled aria-label="Версия v114">v114</button></p><h1>MyHealth</h1></div></div>
-    <div class="header-actions"><button id="data-menu-button" class="icon-button" type="button" aria-label="Сохранить" title="Сохранить"><span aria-hidden="true">💾</span></button><button id="account-button" class="icon-button" type="button" data-view="profile" aria-label="Аккаунт" title="Аккаунт"><span aria-hidden="true">👤</span></button></div>
+    <div class="brand"><span id="brand-icon-container" class="brand-icon-container" aria-hidden="true"><img class="brand-icon" src="./icons/icon-192.png" alt=""><span class="brand-emoji" hidden></span></span><div><p class="eyebrow">Дневник здоровья · <button id="app-version" class="app-version" type="button" disabled aria-label="Версия v115">v115</button></p><h1>MyHealth</h1></div></div>
+    <div class="header-actions"><button id="settings-button" class="icon-button" type="button" data-view="settings" data-settings-root aria-label="Настройки" title="Настройки"><span aria-hidden="true">⚙️</span></button></div>
   </header>
 
   <main id="app" class="app-main">
@@ -56,9 +56,24 @@
       <p class="medical-note">Диапазоны справочные и не являются диагнозом. Для медицинской оценки обратитесь к врачу.</p>
     </section>
 
+    <section id="settings-view" class="view" aria-labelledby="settings-heading" hidden>
+      <div class="section-heading"><div><p class="eyebrow">Управление приложением</p><h2 id="settings-heading">Настройки</h2></div></div>
+      <div class="settings-grid">
+        <button class="settings-card" type="button" data-settings-target="profile"><span class="settings-icon" aria-hidden="true">👤</span><span class="settings-main"><strong>Аккаунт</strong><small>Личные данные пользователя</small></span><span class="settings-chevron" aria-hidden="true">›</span></button>
+        <button class="settings-card" type="button" data-settings-target="backup"><span class="settings-icon" aria-hidden="true">💾</span><span class="settings-main"><strong>Резервная копия</strong><small>Экспорт и импорт данных</small></span><span class="settings-chevron" aria-hidden="true">›</span></button>
+      </div>
+    </section>
     <section id="profile-view" class="view" aria-labelledby="profile-heading" hidden>
       <div class="section-heading"><div><p class="eyebrow">Личный профиль</p><h2 id="profile-heading">Данные</h2></div></div>
+      <button id="profile-back" class="back-button" type="button"><span aria-hidden="true">‹</span> К настройкам</button>
       <div id="profile-content" aria-live="polite"></div>
+    </section>
+    <section id="backup-view" class="view" aria-labelledby="backup-heading" hidden>
+      <div class="section-heading"><div><p class="eyebrow">Локальные данные</p><h2 id="backup-heading">Резервная копия</h2></div></div>
+      <button id="backup-back" class="back-button" type="button"><span aria-hidden="true">‹</span> К настройкам</button>
+      <div class="privacy-card"><span aria-hidden="true">🔒</span><p><strong>Только на этом устройстве</strong><br>Записи не отправляются на сервер. Регулярный JSON-экспорт защищает от потери данных.</p></div>
+      <div class="data-actions"><button id="export-csv" class="list-action" type="button"><span aria-hidden="true">📤</span><span><strong>Экспорт CSV</strong><small>Таблицы для врача</small></span></button><button id="export-json" class="list-action" type="button"><span aria-hidden="true">📤</span><span><strong>Экспорт JSON</strong><small>Полная резервная копия</small></span></button><label class="list-action file-action"><span aria-hidden="true">📥</span><span><strong>Импорт JSON</strong><small>Полное восстановление</small></span><input id="import-file" type="file" accept="application/json,.json"></label></div>
+      <p id="data-error" class="form-error" role="alert"></p>
     </section>
     <section id="directories-view" class="view" aria-labelledby="directories-heading" hidden>
       <div class="section-heading"><div><p class="eyebrow">Настройка</p><h2 id="directories-heading">Справочники</h2></div></div>
@@ -171,7 +186,6 @@
     <p id="profile-error" class="form-error" role="alert"></p><div class="dialog-actions"><button class="secondary-button" type="button" data-close>Отмена</button><button id="profile-save" class="primary-button" type="submit">Сохранить</button></div>
   </form></dialog>
 
-  <dialog id="data-dialog" class="sheet"><div class="dialog-header"><div><p class="eyebrow">Локальные данные</p><h2>Резервная копия</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть">✕</button></div><div class="privacy-card"><span aria-hidden="true">🔒</span><p><strong>Только на этом устройстве</strong><br>Записи не отправляются на сервер. Регулярный JSON-экспорт защищает от потери данных.</p></div><div class="data-actions"><button id="export-csv" class="list-action" type="button"><span aria-hidden="true">📤</span><span><strong>Экспорт CSV</strong><small>Таблицы для врача</small></span></button><button id="export-json" class="list-action" type="button"><span aria-hidden="true">📤</span><span><strong>Экспорт JSON</strong><small>Полная резервная копия</small></span></button><label class="list-action file-action"><span aria-hidden="true">📥</span><span><strong>Импорт JSON</strong><small>Полное восстановление</small></span><input id="import-file" type="file" accept="application/json,.json"></label></div><p id="data-error" class="form-error" role="alert"></p></dialog>
   <dialog id="import-dialog" class="sheet"><div class="dialog-header"><div><p class="eyebrow">Проверенный файл</p><h2>Резервная копия</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть">✕</button></div><div id="import-summary" class="import-summary"></div><p class="muted">При совпадении ID останется запись с более новым <code>editedAt</code>.</p><div class="stack-actions"><button id="import-merge" class="secondary-button wide" type="button">Добавить к существующим</button><button id="import-replace" class="danger-button wide" type="button">Заменить все данные</button></div><p id="import-error" class="form-error" role="alert"></p></dialog>
   <dialog id="confirm-dialog" class="confirm-dialog"><h2 id="confirm-title">Подтверждение</h2><p id="confirm-message"></p><div class="dialog-actions"><button id="confirm-cancel" class="secondary-button" type="button">Отмена</button><button id="confirm-ok" class="danger-button" type="button">Подтвердить</button></div></dialog>
   <dialog id="backup-prompt-dialog" class="confirm-dialog backup-prompt-dialog" aria-labelledby="backup-prompt-title"><p class="eyebrow">Резервная копия</p><h2 id="backup-prompt-title">Сохранить данные в JSON?</h2><p>Данные изменены. JSON-файл будет содержать всю актуальную базу MyHealth.</p><p class="muted">Если выбрать «Позже», приложение повторит запрос при следующем изменении или запуске.</p><label class="check-field"><input id="backup-dont-remind" type="checkbox"><span><strong>Больше не напоминать</strong><small>До следующего изменения данных</small></span></label><p id="backup-prompt-error" class="form-error" role="alert"></p><div class="dialog-actions"><button id="backup-later" class="secondary-button" type="button"><strong>Позже</strong></button><button id="backup-save" class="primary-button" type="button">Сохранить</button></div></dialog>

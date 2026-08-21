@@ -277,6 +277,14 @@ dialog.form-sheet { overflow-y: auto; }
 .list-action small { color: var(--muted); }
 .file-action { position: relative; }
 .file-action input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.settings-grid { display: grid; gap: 10px; }
+.settings-card { display: grid; grid-template-columns: 48px minmax(0, 1fr) 22px; gap: 12px; align-items: center; width: 100%; min-height: 88px; padding: 14px; border: 1px solid var(--line); border-radius: 17px; background: var(--surface); text-align: left; box-shadow: 0 4px 18px rgba(20, 35, 31, .04); cursor: pointer; }
+.settings-card:hover { border-color: color-mix(in srgb, var(--primary) 42%, var(--line)); }
+.settings-icon { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 15px; background: var(--surface-2); font-size: 23px; }
+.settings-main { display: grid; min-width: 0; gap: 4px; }
+.settings-main strong { font-size: 16px; }
+.settings-main small { color: var(--muted); line-height: 1.35; }
+.settings-chevron { color: var(--muted); font-size: 32px; line-height: 1; }
 .import-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
 .import-summary div { padding: 14px; border-radius: 14px; background: var(--surface-2); }
 .import-summary strong { display: block; font-size: 25px; }
