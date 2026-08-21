@@ -66,10 +66,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   background: color-mix(in srgb, var(--bg) 86%, transparent); backdrop-filter: blur(18px); border-bottom: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
 }
 .brand { display: flex; align-items: center; gap: 11px; }
-.brand-icon-button { display: grid; place-items: center; width: 39px; min-width: 39px; height: 39px; padding: 0; border: 0; border-radius: 13px; background: transparent; box-shadow: 0 6px 16px rgba(22, 123, 104, .24); cursor: pointer; }
+.brand-icon-button { display: grid; place-items: center; width: 39px; min-width: 39px; height: 39px; padding: 0; border: 0; border-radius: 13px; appearance: none; -webkit-appearance: none; background: transparent; box-shadow: 0 6px 16px rgba(22, 123, 104, .24); cursor: pointer; }
+.brand-icon-button[aria-pressed="true"] { background: transparent; box-shadow: none; }
 .brand-icon, .brand-emoji { grid-area: 1 / 1; width: 39px; height: 39px; border-radius: 13px; }
 .brand-icon { display: block; }
-.brand-emoji { display: grid; place-items: center; font-size: 30px; line-height: 1; }
+.brand-emoji { display: grid; place-items: center; background: transparent; font-size: 30px; line-height: 1; }
 .header-actions { display: flex; align-items: center; gap: 8px; }
 h1, h2, h3, p { margin-top: 0; }
 h1 { margin-bottom: 0; font-size: 21px; letter-spacing: -.03em; }
