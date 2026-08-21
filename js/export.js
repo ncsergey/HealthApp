@@ -52,8 +52,7 @@ export async function exportCsv(data) {
     ["glucose.csv", data.glucoseMeasurements, ["id", "measuredAt", "editedAt", "value", "format", "context", "comment"]],
     ["weight.csv", data.weightMeasurements, ["id", "measuredAt", "editedAt", "weight", "comment"]],
     ["medication-courses.csv", medicationCourseRows, ["id", "medicationId", "medication", "amount", "unitId", "startDate", "endDate", "foodRelation", "comment", "archived", "editedAt"]],
-    ["medication-schedules.csv", medicationScheduleRows, ["courseId", "time"]],
-    ["medication-intakes.csv", data.medicationIntakes || [], ["id", "courseId", "scheduledDate", "scheduledTime", "actualTakenAt", "status", "amount", "unitId", "foodRelation", "comment", "editedAt"]]
+    ["medication-schedules.csv", medicationScheduleRows, ["courseId", "time"]]
   ];
   const files = definitions.map(([name, rows, columns]) => new File([toCsv(rows, columns)], name, { type: "text/csv;charset=utf-8" }));
   const shareResult = await shareFiles(files, "Экспорт MyHealth");
