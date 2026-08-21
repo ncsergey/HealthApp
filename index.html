@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#f7faf9" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#101817" media="(prefers-color-scheme: dark)">
+  <meta name="description" content="Локальный дневник здоровья">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="MyHealth">
+  <title>MyHealth</title>
+  <link rel="manifest" href="./manifest.json">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png">
+  <link rel="icon" href="./icons/icon-192.png">
+  <link rel="stylesheet" href="./css/app.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand"><button id="brand-icon-button" class="brand-icon-button" type="button" aria-label="Показать праздничный значок" aria-pressed="false"><img class="brand-icon" src="./icons/icon-192.png" alt=""><span class="brand-emoji" aria-hidden="true" hidden>🥳</span></button><div><p class="eyebrow">Личный дневник · <button id="app-version" class="app-version" type="button" disabled aria-label="Версия v112">v112</button></p><h1>MyHealth</h1></div></div>
+    <div class="header-actions"><button id="data-menu-button" class="icon-button" type="button" aria-label="Сохранить" title="Сохранить"><span aria-hidden="true">💾</span></button><button id="account-button" class="icon-button" type="button" data-view="profile" aria-label="Аккаунт" title="Аккаунт"><span aria-hidden="true">👤</span></button></div>
+  </header>
+
+  <main id="app" class="app-main">
+    <div id="offline-banner" class="status-banner" hidden>Офлайн-режим · все функции доступны</div>
+    <div id="storage-warning" class="status-banner warning" hidden>iOS может очистить локальные данные. Регулярно сохраняйте JSON-копию.</div>
+
+    <section id="diary-view" class="view" aria-labelledby="diary-heading">
+      <div class="section-heading"><div><p class="eyebrow">Хронология</p><h2 id="diary-heading">Дневник</h2></div></div>
+      <label class="field select-field diary-filter-select"><span>Тип записи</span><select id="diary-filter-select" aria-label="Фильтр дневника">
+        <option value="all">Все</option><option value="pain">Боль</option><option value="pressure">Давление</option><option value="pulse">Пульс</option><option value="glucose">Глюкоза</option><option value="weight">Вес</option>
+      </select></label>
+      <div class="filter-scroll" aria-label="Прокрутите для остальных фильтров"><div id="diary-filter" class="segmented diary-filters" role="group" aria-label="Фильтр дневника">
+        <button class="active" type="button" data-filter="all" aria-pressed="true">Все</button>
+        <button type="button" data-filter="pain" aria-pressed="false">Боль</button>
+        <button type="button" data-filter="pressure" aria-pressed="false">Давление</button>
+        <button type="button" data-filter="pulse" aria-pressed="false">Пульс</button>
+        <button type="button" data-filter="glucose" aria-pressed="false">Глюкоза</button>
+        <button type="button" data-filter="weight" aria-pressed="false">Вес</button>
+      </div></div>
+      <div id="diary-list" class="timeline" aria-live="polite"></div>
+      <button id="load-more-button" class="secondary-button wide" type="button" hidden>Показать ещё</button>
+      <button id="add-button" class="add-button" type="button" aria-label="Добавить"><span aria-hidden="true">➕</span></button>
+    </section>
+
+    <section id="stats-view" class="view" aria-labelledby="stats-heading" hidden>
+      <div class="section-heading"><div><p class="eyebrow">Только по вашим записям</p><h2 id="stats-heading">Статистика</h2></div></div>
+      <button id="stats-back" class="back-button" type="button" hidden><span aria-hidden="true">‹</span> К обзору</button>
+      <label class="field period-field"><span>Период</span><select id="stats-period">
+        <option value="7">7 дней</option><option value="30" selected>30 дней</option><option value="90">3 месяца</option>
+        <option value="180">6 месяцев</option><option value="365">12 месяцев</option><option value="all">Всё время</option><option value="custom">Свой период</option>
+      </select></label>
+      <div id="custom-period" class="custom-period" hidden><label class="field"><span>Дата начала</span><input id="period-start" type="date"></label><label class="field"><span>Дата окончания</span><input id="period-end" type="date"></label></div>
+      <div id="stats-subfilters" hidden></div>
+      <div id="stats-content" class="stats-content" aria-live="polite"></div>
+      <p class="medical-note">Диапазоны справочные и не являются диагнозом. Для медицинской оценки обратитесь к врачу.</p>
+    </section>
+
+    <section id="profile-view" class="view" aria-labelledby="profile-heading" hidden>
+      <div class="section-heading"><div><p class="eyebrow">Личный профиль</p><h2 id="profile-heading">Данные</h2></div></div>
+      <div id="profile-content" aria-live="polite"></div>
+    </section>
+    <section id="directories-view" class="view" aria-labelledby="directories-heading" hidden>
+      <div class="section-heading"><div><p class="eyebrow">Настройка</p><h2 id="directories-heading">Справочники</h2></div></div>
+      <button id="directories-back" class="back-button" type="button" hidden><span aria-hidden="true">‹</span> К справочникам</button>
+      <div id="directories-content" class="directories-content" aria-live="polite"></div>
+      <button id="directory-add-button" class="add-button" type="button" aria-label="Добавить элемент справочника" hidden><span aria-hidden="true">➕</span></button>
+    </section>
+    <section id="medications-view" class="view" aria-labelledby="medications-heading" hidden>
+      <div class="section-heading"><div><p class="eyebrow">Расписание и контроль</p><h2 id="medications-heading">Лекарства</h2></div></div>
+      <div id="medications-tabs" class="segmented medication-tabs" role="tablist" aria-label="Разделы лекарств">
+        <button class="active" type="button" data-medication-tab="today" role="tab" aria-selected="true">Сегодня</button>
+        <button type="button" data-medication-tab="courses" role="tab" aria-selected="false">Курсы</button>
+        <button type="button" data-medication-tab="history" role="tab" aria-selected="false">История</button>
+      </div>
+      <div id="medications-content" aria-live="polite"></div>
+      <button id="medication-course-add" class="add-button" type="button" aria-label="Добавить курс лекарства" hidden><span aria-hidden="true">➕</span></button>
+    </section>
+  </main>
+
+  <nav class="bottom-nav" aria-label="Основные разделы">
+    <button class="active" type="button" data-view="diary" aria-current="page" aria-label="Дневник"><span class="nav-icon" aria-hidden="true">📝</span><span class="nav-label">Дневник</span></button>
+    <button type="button" data-view="stats" aria-label="Статистика"><span class="nav-icon" aria-hidden="true">📊</span><span class="nav-label nav-label-full">Статистика</span><span class="nav-label nav-label-short" aria-hidden="true">Стат.</span></button>
+    <button type="button" data-view="medications" aria-label="Лекарства"><span class="nav-icon" aria-hidden="true">💊</span><span class="nav-label">Лекарства</span></button>
+    <button type="button" data-view="directories" aria-label="Справочники"><span class="nav-icon" aria-hidden="true">📚</span><span class="nav-label nav-label-full">Справочники</span><span class="nav-label nav-label-short" aria-hidden="true">Справ.</span></button>
+  </nav>
+
+  <dialog id="entry-type-dialog" class="sheet compact-choice-sheet">
+    <div class="dialog-header"><div><p class="eyebrow">Новая запись</p><h2>Что добавить?</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть">✕</button></div>
+    <div class="choice-grid">
+      <button id="choose-headache" class="choice-card headache-choice" type="button"><span class="choice-icon" aria-hidden="true">⚡</span><strong>Боль</strong></button>
+      <button id="choose-pressure" class="choice-card pressure-choice" type="button"><span class="choice-icon" aria-hidden="true">🩺</span><strong>Давление</strong></button>
+      <button id="choose-pulse" class="choice-card pulse-choice" type="button"><span class="choice-icon" aria-hidden="true">💓</span><strong>Пульс</strong></button>
+      <button id="choose-glucose" class="choice-card glucose-choice" type="button"><span class="choice-icon" aria-hidden="true">🩸</span><strong>Глюкоза</strong></button>
+      <button id="choose-weight" class="choice-card weight-choice" type="button"><span class="choice-icon" aria-hidden="true">⚖️</span><strong>Вес</strong></button>
+    </div>
+    <p id="entry-type-error" class="form-error" role="alert"></p>
+  </dialog>
+
+  <dialog id="pressure-dialog" class="sheet form-sheet entry-form-dialog"><form id="pressure-form" novalidate>
+    <div class="dialog-header"><div><p class="eyebrow">Дневник давления</p><h2 id="pressure-form-title">Новое измерение</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть">✕</button></div>
+    <div class="entry-form-content"><input id="pressure-id" type="hidden">
+      <label class="field"><span>Дата и время</span><input id="pressure-datetime" type="datetime-local" required></label>
+      <div class="field-grid two"><label class="field"><span>Верхнее</span><input id="systolic" type="number" inputmode="numeric" min="30" max="300" required></label><label class="field"><span>Нижнее</span><input id="diastolic" type="number" inputmode="numeric" min="10" max="180" required></label></div>
+      <p id="pressure-warning" class="form-warning" hidden></p><label class="field"><span>Комментарий <small>необязательно</small></span><textarea id="pressure-comment" rows="3" maxlength="1000"></textarea></label><p id="pressure-error" class="form-error" role="alert"></p>
+    </div><div class="dialog-actions"><button class="secondary-button" type="button" data-close>Отмена</button><button id="pressure-save" class="primary-button" type="submit">Сохранить</button></div>
+  </form></dialog>
+
+  <dialog id="pulse-dialog" class="sheet form-sheet entry-form-dialog"><form id="pulse-form" novalidate>
+    <div class="dialog-header"><div><p class="eyebrow">Дневник пульса</p><h2 id="pulse-form-title">Новое измерение</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть">✕</button></div>
+    <div class="entry-form-content"><input id="pulse-id" type="hidden">
+      <label class="field"><span>Дата и время</span><input id="pulse-datetime" type="datetime-local" required></label>
+      <label class="field"><span>Пульс, уд/мин</span><input id="pulse-value" type="number" inputmode="numeric" min="20" max="400" step="1" required></label>
+      <label class="field select-field"><span>Контекст измерения</span><select id="pulse-context" required><option value="resting" selected>В покое</option><option value="active">После физической нагрузки</option><option value="unknown" disabled hidden>Контекст не указан</option></select></label>
+      <div class="field-grid two"><label class="field"><span>SpO2, % <small>необязательно</small></span><input id="pulse-spo2" type="number" inputmode="numeric" min="1" max="100" step="1"></label><label class="field"><span>Стресс, % <small>необязательно</small></span><input id="pulse-stress" type="number" inputmode="numeric" min="0" max="100" step="1"></label></div>
+      <label class="field"><span>Комментарий <small>необязательно</small></span><textarea id="pulse-comment" rows="3" maxlength="1000"></textarea></label><p id="pulse-error" class="form-error" role="alert"></p>
+    </div><div class="dialog-actions"><button class="secondary-button" type="button" data-close>Отмена</button><button id="pulse-save" class="primary-button" type="submit">Сохранить</button></div>
+  </form></dialog>
+
+  <dialog id="headache-dialog" class="sheet form-sheet entry-form-dialog"><form id="headache-form" novalidate>
+    <div class="dialog-header"><div><p class="eyebrow">Дневник боли</p><h2 id="headache-form-title">Новый эпизод</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть">✕</button></div>
+    <div class="entry-form-content"><input id="headache-id" type="hidden">
+      <div class="combobox-row"><label class="field select-field"><span>Часть тела</span><select id="body-part" required></select></label><button id="add-body-part" class="add-directory-button" type="button" aria-label="Добавить часть тела">+</button></div>
+      <section id="headache-step-time" class="headache-step" aria-label="Время приступа"><fieldset><legend>Начало</legend><label class="field"><span>Дата и время</span><input id="headache-start-datetime" type="datetime-local" required></label></fieldset><label class="check-field"><input id="headache-ongoing" type="checkbox" checked><span><strong>Приступ продолжается</strong><small>Окончание можно добавить позже</small></span></label><fieldset id="headache-end-fields" disabled><legend>Окончание</legend><label class="field"><span>Дата и время</span><input id="headache-end-datetime" type="datetime-local"></label></fieldset></section>
+      <section id="headache-step-details" class="headache-step" aria-label="Состояние и лечение"><label id="intensity-single-field" class="field range-field"><span>Интенсивность: <output id="intensity-output">5</output></span><input id="intensity" type="range" min="1" max="10" value="5" step="0.01" aria-valuetext="5 из 10" required></label><label class="check-field"><input id="headache-variable-intensity" type="checkbox"><span><strong>Разная интенсивность</strong><small>Боль разной интенсивности</small></span></label><div id="intensity-range-fields" hidden><label class="field range-field"><span>Интенсивность (min): <output id="intensity-min-output">5</output></span><input id="intensity-min" type="range" min="1" max="10" value="5" step="0.01" aria-valuetext="5 из 10"></label><label class="field range-field"><span>Интенсивность (max): <output id="intensity-max-output">5</output></span><input id="intensity-max" type="range" min="1" max="10" value="5" step="0.01" aria-valuetext="5 из 10"></label></div><div class="combobox-row"><label class="field select-field"><span>Препарат <small>необязательно</small></span><select id="medication"></select></label><button id="add-medication" class="add-directory-button" type="button" aria-label="Добавить препарат">+</button></div><div class="field-grid two medication-dose-row"><label class="field"><span>Количество</span><input id="medication-amount" type="text" inputmode="decimal" disabled></label><label class="field select-field"><span>Единица измерения</span><select id="medication-unit" disabled><option value="">Выберите</option><option value="piece" aria-label="Штука">шт.</option><option value="tablet" aria-label="Таблетка">табл.</option><option value="ampoule" aria-label="Ампула">амп.</option><option value="drop" aria-label="Капля">кап.</option><option value="teaspoon" aria-label="Чайная ложка">ч. л.</option><option value="tablespoon" aria-label="Столовая ложка">ст. л.</option><option value="milligram" aria-label="Миллиграмм">мг</option><option value="milliliter" aria-label="Миллилитр">мл</option></select></label></div><label class="field"><span>Дата и время приёма <small>необязательно</small></span><input id="medication-datetime" type="datetime-local" disabled></label><label class="field"><span>Комментарий <small>необязательно</small></span><textarea id="headache-comment" rows="3" maxlength="1000"></textarea></label></section>
+      <p id="headache-error" class="form-error" role="alert"></p>
+    </div><div class="dialog-actions"><button id="headache-cancel" class="secondary-button" type="button" data-close>Отмена</button><button id="headache-save" class="primary-button" type="submit">Сохранить</button></div>
+  </form></dialog>
+
+  <dialog id="directory-item-dialog" class="sheet form-sheet"><form id="directory-item-form" novalidate>
+    <div class="dialog-header"><div><p class="eyebrow">Справочник</p><h2 id="directory-item-title">Добавить</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть">✕</button></div>
+    <input id="directory-item-id" type="hidden"><label class="field"><span id="directory-item-label">Название</span><input id="directory-item-name" type="text" maxlength="100" required></label><p id="directory-item-error" class="form-error" role="alert"></p>
+    <div class="dialog-actions"><button class="secondary-button" type="button" data-close>Отмена</button><button id="directory-item-save" class="primary-button" type="submit">Добавить</button></div>
+  </form></dialog>
+
+  <dialog id="medication-course-dialog" class="sheet form-sheet entry-form-dialog"><form id="medication-course-form" novalidate>
+    <div class="dialog-header"><div><p class="eyebrow">Назначение</p><h2 id="medication-course-title">Новый курс</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть">✕</button></div>
+    <div class="entry-form-content"><input id="medication-course-id" type="hidden">
+      <div class="combobox-row"><label class="field select-field"><span>Лекарство</span><select id="course-medication" required></select></label><button id="course-add-medication" class="add-directory-button" type="button" aria-label="Добавить лекарство">+</button></div>
+      <div class="field-grid two"><label class="field"><span>Количество</span><input id="course-amount" type="text" inputmode="decimal" placeholder="1 или 1,5" required></label><label class="field select-field"><span>Единица</span><select id="course-unit" required><option value="">Выберите</option><option value="piece">шт.</option><option value="tablet">табл.</option><option value="ampoule">амп.</option><option value="drop">кап.</option><option value="teaspoon">ч. л.</option><option value="tablespoon">ст. л.</option><option value="milligram">мг</option><option value="milliliter">мл</option></select></label></div>
+      <div class="field-grid two"><label class="field"><span>Дата начала</span><input id="course-start" type="date" required></label><label class="field"><span>Дата окончания <small>необязательно</small></span><input id="course-end" type="date"></label></div>
+      <fieldset><legend>Схема приёма</legend><div id="course-schedule" class="schedule-fields"></div><button id="course-add-time" class="secondary-button schedule-add" type="button">+ Добавить время</button></fieldset>
+      <label class="field select-field"><span>Зависимость от пищи</span><select id="course-food" required><option value="before">До еды</option><option value="during">Во время еды</option><option value="after">После еды</option><option value="any" selected>Независимо от еды</option></select></label>
+      <label class="field"><span>Комментарий <small>необязательно</small></span><textarea id="course-comment" rows="3" maxlength="1000"></textarea></label>
+      <p id="medication-course-warning" class="form-warning" hidden></p><p id="medication-course-error" class="form-error" role="alert"></p>
+    </div><div class="dialog-actions"><button class="secondary-button" type="button" data-close>Отмена</button><button id="medication-course-save" class="primary-button" type="submit">Сохранить</button></div>
+  </form></dialog>
+
+  <dialog id="glucose-dialog" class="sheet form-sheet entry-form-dialog"><form id="glucose-form" novalidate>
+    <div class="dialog-header"><div><p class="eyebrow">Дневник глюкозы</p><h2 id="glucose-form-title">Новое измерение</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть">✕</button></div>
+    <div class="entry-form-content"><input id="glucose-id" type="hidden"><label class="field"><span>Дата и время</span><input id="glucose-datetime" type="datetime-local" required></label>
+      <label class="field"><span>Глюкоза, ммоль/л</span><input id="glucose-value" type="text" inputmode="decimal" required></label>
+      <label class="field select-field"><span>Формат результата</span><select id="glucose-format" required><option value="plasma">Эквивалент плазмы</option><option value="wholeBlood">Цельная кровь</option></select></label>
+      <label class="field select-field"><span>Контекст измерения</span><select id="glucose-context" required><option value="fasting">Натощак</option><option value="beforeMeal">Перед едой</option><option value="after1h">Через 1 час после начала еды</option><option value="after2h">Через 2 часа после начала еды</option><option value="random">Случайное измерение</option></select></label>
+      <p class="field-help glucose-reference-help">Общие диапазоны не применимы при беременности, возрасте до 18 лет или известном диабете с индивидуальными целями.</p>
+      <label class="field"><span>Комментарий <small>необязательно</small></span><textarea id="glucose-comment" rows="2" maxlength="1000"></textarea></label><p id="glucose-error" class="form-error" role="alert"></p>
+    </div><div class="dialog-actions"><button class="secondary-button" type="button" data-close>Отмена</button><button id="glucose-save" class="primary-button" type="submit">Сохранить</button></div>
+  </form></dialog>
+
+  <dialog id="weight-dialog" class="sheet form-sheet entry-form-dialog"><form id="weight-form" novalidate>
+    <div class="dialog-header"><div><p class="eyebrow">Дневник веса</p><h2 id="weight-form-title">Новое измерение</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть">✕</button></div>
+    <div class="entry-form-content"><input id="weight-id" type="hidden"><label class="field"><span>Дата и время</span><input id="weight-datetime" type="datetime-local" required></label><label class="field"><span>Вес, кг</span><input id="weight-value" type="number" inputmode="numeric" min="1" max="700" step="1" required></label><label class="field"><span>Комментарий <small>необязательно</small></span><textarea id="weight-comment" rows="3" maxlength="1000"></textarea></label><p id="weight-error" class="form-error" role="alert"></p></div>
+    <div class="dialog-actions"><button class="secondary-button" type="button" data-close>Отмена</button><button id="weight-save" class="primary-button" type="submit">Сохранить</button></div>
+  </form></dialog>
+
+  <dialog id="profile-dialog" class="sheet form-sheet"><form id="profile-form" novalidate>
+    <div class="dialog-header"><div><p class="eyebrow">Личный профиль</p><h2 id="profile-form-title">Заполнить данные</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть">✕</button></div>
+    <label class="field"><span>Дата рождения</span><input id="profile-birth-date" type="date" required></label>
+    <label class="field select-field"><span>Пол</span><select id="profile-sex" required><option value="">Выберите</option><option value="male">Мужской</option><option value="female">Женский</option></select></label>
+    <label class="field"><span>Рост, см</span><input id="profile-height" type="number" inputmode="numeric" min="50" max="300" step="1" required></label>
+    <p id="profile-error" class="form-error" role="alert"></p><div class="dialog-actions"><button class="secondary-button" type="button" data-close>Отмена</button><button id="profile-save" class="primary-button" type="submit">Сохранить</button></div>
+  </form></dialog>
+
+  <dialog id="data-dialog" class="sheet"><div class="dialog-header"><div><p class="eyebrow">Локальные данные</p><h2>Резервная копия</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть">✕</button></div><div class="privacy-card"><span aria-hidden="true">🔒</span><p><strong>Только на этом устройстве</strong><br>Записи не отправляются на сервер. Регулярный JSON-экспорт защищает от потери данных.</p></div><div class="data-actions"><button id="export-csv" class="list-action" type="button"><span aria-hidden="true">📤</span><span><strong>Экспорт CSV</strong><small>Таблицы для врача</small></span></button><button id="export-json" class="list-action" type="button"><span aria-hidden="true">📤</span><span><strong>Экспорт JSON</strong><small>Полная резервная копия</small></span></button><label class="list-action file-action"><span aria-hidden="true">📥</span><span><strong>Импорт JSON</strong><small>Полное восстановление</small></span><input id="import-file" type="file" accept="application/json,.json"></label></div><p id="data-error" class="form-error" role="alert"></p></dialog>
+  <dialog id="import-dialog" class="sheet"><div class="dialog-header"><div><p class="eyebrow">Проверенный файл</p><h2>Резервная копия</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть">✕</button></div><div id="import-summary" class="import-summary"></div><p class="muted">При совпадении ID останется запись с более новым <code>editedAt</code>.</p><div class="stack-actions"><button id="import-merge" class="secondary-button wide" type="button">Добавить к существующим</button><button id="import-replace" class="danger-button wide" type="button">Заменить все данные</button></div><p id="import-error" class="form-error" role="alert"></p></dialog>
+  <dialog id="confirm-dialog" class="confirm-dialog"><h2 id="confirm-title">Подтверждение</h2><p id="confirm-message"></p><div class="dialog-actions"><button id="confirm-cancel" class="secondary-button" type="button">Отмена</button><button id="confirm-ok" class="danger-button" type="button">Подтвердить</button></div></dialog>
+  <dialog id="backup-prompt-dialog" class="confirm-dialog backup-prompt-dialog" aria-labelledby="backup-prompt-title"><p class="eyebrow">Резервная копия</p><h2 id="backup-prompt-title">Сохранить данные в JSON?</h2><p>Данные изменены. JSON-файл будет содержать всю актуальную базу MyHealth.</p><p class="muted">Если выбрать «Позже», приложение повторит запрос при следующем изменении или запуске.</p><label class="check-field"><input id="backup-dont-remind" type="checkbox"><span><strong>Больше не напоминать</strong><small>До следующего изменения данных</small></span></label><p id="backup-prompt-error" class="form-error" role="alert"></p><div class="dialog-actions"><button id="backup-later" class="secondary-button" type="button"><strong>Позже</strong></button><button id="backup-save" class="primary-button" type="button">Сохранить</button></div></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <noscript>Для работы MyHealth необходимо включить JavaScript.</noscript>
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>
