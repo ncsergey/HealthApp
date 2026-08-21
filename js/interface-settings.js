@@ -1,9 +1,11 @@
 export const UI_SETTINGS_KEY = "myhealth:ui-settings:v1";
 export const DEFAULT_GLASS_TRANSPARENCY = 25;
+export const DEFAULT_GLASS_EFFECTS = "reduced";
 export const MIN_GLASS_TRANSPARENCY = 10;
 export const MAX_GLASS_TRANSPARENCY = 45;
 
 const INTERFACES = new Set(["classic", "modern"]);
+const GLASS_EFFECTS = new Set(["full", "reduced", "none"]);
 
 export function isValidInterface(value) {
   return INTERFACES.has(value);
@@ -13,11 +15,16 @@ export function isValidGlassTransparency(value) {
   return Number.isInteger(value) && value >= MIN_GLASS_TRANSPARENCY && value <= MAX_GLASS_TRANSPARENCY;
 }
 
+export function isValidGlassEffects(value) {
+  return GLASS_EFFECTS.has(value);
+}
+
 export function normalizeUiSettings(value) {
   if (!value || typeof value !== "object" || Array.isArray(value) || !isValidInterface(value.interface)) return null;
   return {
     interface: value.interface,
-    glassTransparency: isValidGlassTransparency(value.glassTransparency) ? value.glassTransparency : DEFAULT_GLASS_TRANSPARENCY
+    glassTransparency: isValidGlassTransparency(value.glassTransparency) ? value.glassTransparency : DEFAULT_GLASS_TRANSPARENCY,
+    glassEffects: isValidGlassEffects(value.glassEffects) ? value.glassEffects : DEFAULT_GLASS_EFFECTS
   };
 }
 
@@ -34,6 +41,17 @@ export function saveUiSettings(settings, storage = globalThis.localStorage) {
   if (!normalized) throw new Error("Некорректные настройки интерфейса.");
   storage.setItem(UI_SETTINGS_KEY, JSON.stringify(normalized));
   return normalized;
+}
+
+export function applyGlassTransparency(value, root = document.documentElement) {
+  const transparency = Number(value);
+  if (!Number.isFinite(transparency) || transparency < MIN_GLASS_TRANSPARENCY || transparency > MAX_GLASS_TRANSPARENCY) throw new Error("Некорректная прозрачность стекла.");
+  const opacity = 100 - transparency;
+  root.style.setProperty("--glass-transparency", `${transparency}%`);
+  root.style.setProperty("--glass-opacity", `${opacity}%`);
+  root.style.setProperty("--glass-raised-opacity", `${Math.min(96, opacity + 12)}%`);
+  root.style.setProperty("--glass-subtle-opacity", `${Math.max(42, opacity - 12)}%`);
+  return transparency;
 }
 
 function platformEvidence(navigatorLike = {}) {
@@ -72,18 +90,15 @@ export function initializeUiSettings({ storage = globalThis.localStorage, naviga
     saveUiSettings(stored, storage);
     return stored;
   }
-  const selected = { interface: detect(navigatorLike), glassTransparency: DEFAULT_GLASS_TRANSPARENCY };
+  const selected = { interface: detect(navigatorLike), glassTransparency: DEFAULT_GLASS_TRANSPARENCY, glassEffects: DEFAULT_GLASS_EFFECTS };
   return saveUiSettings(selected, storage);
 }
 
 export function applyUiSettings(settings, root = document.documentElement) {
   const normalized = normalizeUiSettings(settings);
   if (!normalized) throw new Error("Некорректные настройки интерфейса.");
-  const opacity = 100 - normalized.glassTransparency;
   root.dataset.interface = normalized.interface;
-  root.style.setProperty("--glass-transparency", `${normalized.glassTransparency}%`);
-  root.style.setProperty("--glass-opacity", `${opacity}%`);
-  root.style.setProperty("--glass-raised-opacity", `${Math.min(96, opacity + 12)}%`);
-  root.style.setProperty("--glass-subtle-opacity", `${Math.max(42, opacity - 12)}%`);
+  root.dataset.glassEffects = normalized.glassEffects;
+  applyGlassTransparency(normalized.glassTransparency, root);
   return normalized;
 }

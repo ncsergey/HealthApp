@@ -23,7 +23,7 @@
 </head>
 <body>
   <header class="app-header">
-    <div class="brand"><span id="brand-icon-container" class="brand-icon-container" aria-hidden="true"><img class="brand-icon" src="./icons/icon-192.png" alt=""><span class="brand-emoji" hidden></span></span><div><p class="eyebrow">Дневник здоровья · <button id="app-version" class="app-version" type="button" disabled aria-label="Версия v118">v118</button></p><h1>MyHealth</h1></div></div>
+    <div class="brand"><span id="brand-icon-container" class="brand-icon-container" aria-hidden="true"><img class="brand-icon" src="./icons/icon-192.png" alt=""><span class="brand-emoji" hidden></span></span><div><p class="eyebrow">Дневник здоровья · <button id="app-version" class="app-version" type="button" disabled aria-label="Версия v122">v122</button></p><h1>MyHealth</h1></div></div>
     <div class="header-actions"><button id="settings-button" class="icon-button" type="button" data-view="settings" data-settings-root aria-label="Настройки" title="Настройки"><span aria-hidden="true">⚙️</span></button></div>
   </header>
 
@@ -83,9 +83,17 @@
           <span class="interface-option-main"><strong>Современный</strong><small>Многослойный эффект Liquid Glass</small></span><span class="selection-mark" aria-hidden="true">✓</span>
         </button>
       </div>
+      <section id="glass-effects-card" class="glass-settings-card" aria-labelledby="glass-effects-heading">
+        <div class="glass-settings-heading"><h3 id="glass-effects-heading">Эффекты Liquid Glass</h3><p>Выберите баланс визуальной глубины и нагрузки на устройство.</p></div>
+        <div class="glass-effects-options" role="radiogroup" aria-labelledby="glass-effects-heading">
+          <button class="glass-effects-option" type="button" data-glass-effects-choice="full" role="radio" aria-checked="false"><span><strong>Полный эффект</strong><small>Максимальная глубина и размытие</small></span><span class="selection-mark" aria-hidden="true">✓</span></button>
+          <button class="glass-effects-option" type="button" data-glass-effects-choice="reduced" role="radio" aria-checked="false"><span><strong>Облегчённый</strong><small>Меньше нагрузки и размытия</small></span><span class="selection-mark" aria-hidden="true">✓</span></button>
+          <button class="glass-effects-option" type="button" data-glass-effects-choice="none" role="radio" aria-checked="false"><span><strong>Без размытия</strong><small>Минимальная нагрузка на устройство</small></span><span class="selection-mark" aria-hidden="true">✓</span></button>
+        </div>
+      </section>
       <div id="glass-transparency-card" class="transparency-card">
         <div class="transparency-heading"><div><strong>Прозрачность стекла</strong><small>Применяется ко всем стеклянным поверхностям</small></div><output id="glass-transparency-value" for="glass-transparency">25%</output></div>
-        <input id="glass-transparency" type="range" min="10" max="45" step="1" value="25" aria-label="Прозрачность стекла в процентах">
+        <input id="glass-transparency" type="range" min="10" max="45" step="0.01" value="25" aria-label="Прозрачность стекла в процентах" aria-valuetext="25%">
         <div class="range-labels" aria-hidden="true"><span>10%</span><span>45%</span></div>
       </div>
     </section>

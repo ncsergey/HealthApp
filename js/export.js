@@ -67,7 +67,7 @@ export function createBackupPayload(data, uiSettings, exportedAt = new Date().to
   if (!settings) throw new Error("Не удалось подготовить настройки интерфейса для резервной копии.");
   return {
     format: "health-diary-backup",
-    version: 8,
+    version: 9,
     exportedAt,
     settings,
     profile: data.profile,

@@ -8,7 +8,7 @@ import { ageOnDate, calculateBmi, evaluateBmi, evaluateGlucose, evaluatePressure
 import { createElement as el, debounce, finiteInteger, makeId } from "./utils.js";
 import { DEFAULT_BODY_PARTS, UNIT_BY_ID, directoryItemById, formatMedicationAmount, formatMedicationDose, hasOngoingPainForBodyPart, normalizedNameKey, parseMedicationAmount, validateDirectoryName } from "./pain.js";
 import { DAY_PARTS, FOOD_RELATIONS, buildDaySchedule, isCourseCompletedOn, validateMedicationCourse } from "./medications.js";
-import { DEFAULT_GLASS_TRANSPARENCY, applyUiSettings, detectInitialInterface, initializeUiSettings, saveUiSettings } from "./interface-settings.js";
+import { DEFAULT_GLASS_EFFECTS, DEFAULT_GLASS_TRANSPARENCY, MAX_GLASS_TRANSPARENCY, MIN_GLASS_TRANSPARENCY, applyGlassTransparency, applyUiSettings, detectInitialInterface, initializeUiSettings, saveUiSettings } from "./interface-settings.js";
 
 const PAGE_SIZE = 60;
 const BIRTHDAY_EMOJIS = Object.freeze(["🎉", "🥳", "🎂", "🎊", "🎈", "🎁", "🍰"]);
@@ -26,7 +26,7 @@ let modalScrollY = 0;
 
 const initialUiSettings = (() => {
   try { return initializeUiSettings(); }
-  catch { return { interface: detectInitialInterface(globalThis.navigator), glassTransparency: DEFAULT_GLASS_TRANSPARENCY }; }
+  catch { return { interface: detectInitialInterface(globalThis.navigator), glassTransparency: DEFAULT_GLASS_TRANSPARENCY, glassEffects: DEFAULT_GLASS_EFFECTS }; }
 })();
 applyUiSettings(initialUiSettings);
 
@@ -62,7 +62,15 @@ function renderInterfaceSettings() {
   const transparency = document.querySelector("#glass-transparency");
   transparency.value = String(state.uiSettings.glassTransparency);
   document.querySelector("#glass-transparency-value").value = `${state.uiSettings.glassTransparency}%`;
+  transparency.setAttribute("aria-valuetext", `${state.uiSettings.glassTransparency}%`);
   document.querySelector("#glass-transparency-card").hidden = state.uiSettings.interface !== "modern";
+  const effectsCard = document.querySelector("#glass-effects-card");
+  effectsCard.hidden = state.uiSettings.interface !== "modern";
+  for (const option of effectsCard.querySelectorAll("[data-glass-effects-choice]")) {
+    const selected = option.dataset.glassEffectsChoice === state.uiSettings.glassEffects;
+    option.classList.toggle("selected", selected);
+    option.setAttribute("aria-checked", String(selected));
+  }
 }
 
 function persistUiSettings(nextSettings) {
@@ -71,9 +79,33 @@ function persistUiSettings(nextSettings) {
   renderInterfaceSettings();
 }
 
+function previewGlassTransparency(input) {
+  const value = Number(input.value);
+  try {
+    applyGlassTransparency(value);
+    const rounded = Math.round(value);
+    document.querySelector("#glass-transparency-value").value = `${rounded}%`;
+    input.setAttribute("aria-valuetext", `${rounded}%`);
+  } catch { /* The native range keeps preview values inside its bounds. */ }
+}
+
+function commitGlassTransparency(input) {
+  const transparency = Math.min(MAX_GLASS_TRANSPARENCY, Math.max(MIN_GLASS_TRANSPARENCY, Math.round(Number(input.value))));
+  input.value = String(transparency);
+  persistUiSettings({ ...state.uiSettings, glassTransparency: transparency });
+}
+
+function handleGlassTransparencyKeydown(event) {
+  const direction = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1 }[event.key];
+  if (!direction) return;
+  event.preventDefault();
+  event.currentTarget.value = String(Math.min(MAX_GLASS_TRANSPARENCY, Math.max(MIN_GLASS_TRANSPARENCY, Math.round(Number(event.currentTarget.value)) + direction)));
+  commitGlassTransparency(event.currentTarget);
+}
+
 async function importWithUiSettings(importedSettings, importData) {
   const previousSettings = state.uiSettings;
-  if (importedSettings) persistUiSettings(importedSettings); // A storage failure leaves application data untouched.
+  if (importedSettings) persistUiSettings({ ...previousSettings, ...importedSettings }); // Legacy backups preserve settings they do not contain.
   try { return await importData(); }
   catch (error) {
     if (importedSettings) {
@@ -966,6 +998,13 @@ function chooseHeadacheEntry() {
 
 function bindEvents() {
   syncVisualViewport();
+  document.querySelectorAll('[role="radiogroup"]').forEach((group) => group.addEventListener("keydown", (event) => {
+    const current = event.target.closest('[role="radio"]');
+    if (!current || !group.contains(current) || !["ArrowDown", "ArrowRight", "ArrowUp", "ArrowLeft", "Home", "End"].includes(event.key)) return;
+    const options = [...group.querySelectorAll('[role="radio"]')]; const index = options.indexOf(current);
+    const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? options.length - 1 : event.key === "ArrowDown" || event.key === "ArrowRight" ? (index + 1) % options.length : (index - 1 + options.length) % options.length;
+    event.preventDefault(); options[nextIndex].focus(); options[nextIndex].click();
+  }));
   for (const eventName of ["gesturestart", "gesturechange", "gestureend"]) document.addEventListener(eventName, (event) => event.preventDefault(), { passive: false });
   document.addEventListener("touchmove", (event) => { if (event.touches.length > 1) event.preventDefault(); }, { passive: false });
   document.addEventListener("focusin", (event) => {
@@ -982,7 +1021,11 @@ function bindEvents() {
   document.querySelectorAll("[data-settings-target]").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.settingsTarget)));
   document.querySelector("#profile-back").addEventListener("click", () => switchView("settings")); document.querySelector("#interface-back").addEventListener("click", () => switchView("settings")); document.querySelector("#backup-back").addEventListener("click", () => switchView("settings"));
   document.querySelectorAll("[data-interface-choice]").forEach((button) => button.addEventListener("click", () => { try { persistUiSettings({ ...state.uiSettings, interface: button.dataset.interfaceChoice }); showToast("Оформление изменено"); } catch (error) { showToast(error.message); } }));
-  document.querySelector("#glass-transparency").addEventListener("input", (event) => { try { persistUiSettings({ ...state.uiSettings, glassTransparency: Number(event.currentTarget.value) }); } catch (error) { showToast(error.message); } });
+  document.querySelectorAll("[data-glass-effects-choice]").forEach((button) => button.addEventListener("click", () => { try { persistUiSettings({ ...state.uiSettings, glassEffects: button.dataset.glassEffectsChoice }); showToast("Эффекты Liquid Glass изменены"); } catch (error) { showToast(error.message); } }));
+  const glassTransparency = document.querySelector("#glass-transparency");
+  glassTransparency.addEventListener("input", (event) => previewGlassTransparency(event.currentTarget));
+  glassTransparency.addEventListener("change", (event) => { try { commitGlassTransparency(event.currentTarget); } catch (error) { applyUiSettings(state.uiSettings); renderInterfaceSettings(); showToast(error.message); } });
+  glassTransparency.addEventListener("keydown", (event) => { try { handleGlassTransparencyKeydown(event); } catch (error) { applyUiSettings(state.uiSettings); renderInterfaceSettings(); showToast(error.message); } });
 
   document.querySelectorAll("[data-medication-tab]").forEach((button) => button.addEventListener("click", () => { state.medicationTab = button.dataset.medicationTab; renderMedications(); }));
   elements.medicationCourseAdd.addEventListener("click", () => openMedicationCourseForm()); elements.medicationsContent.addEventListener("click", handleMedicationAction);

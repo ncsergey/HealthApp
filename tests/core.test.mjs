@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { isFuture, moscowDateTimeInputToIso, moscowInputToIso } from "../js/datetime.js";
@@ -8,7 +9,7 @@ import { formatMedicationDose, hasOngoingPainForBodyPart, normalizedNameKey, par
 import { filterDataForPeriod, glucoseStats, headacheStats, overviewStats, pressureStats, pulseStats, weightStats } from "../js/statistics.js";
 import { buildDaySchedule, dayPartForTime, isCourseCompletedOn, medicationStatistics, normalizeSchedule, validateMedicationCourse } from "../js/medications.js";
 import { createBackupPayload } from "../js/export.js";
-import { DEFAULT_GLASS_TRANSPARENCY, UI_SETTINGS_KEY, initializeUiSettings, readUiSettings, saveUiSettings } from "../js/interface-settings.js";
+import { DEFAULT_GLASS_TRANSPARENCY, UI_SETTINGS_KEY, applyGlassTransparency, applyUiSettings, initializeUiSettings, readUiSettings, saveUiSettings } from "../js/interface-settings.js";
 
 function memoryStorage() {
   const values = new Map();
@@ -426,65 +427,113 @@ test("первичный интерфейс выбирается по надёж
     assert.equal(settings.interface, expected);
     assert.equal(readUiSettings(storage).interface, expected);
     assert.equal(settings.glassTransparency, DEFAULT_GLASS_TRANSPARENCY);
+    assert.equal(settings.glassEffects, "reduced");
   }
 });
 
-test("сохранённый интерфейс применяется без определения ОС", () => {
-  for (const [savedInterface, navigatorLike] of [["classic", { platform: "MacIntel" }], ["modern", { platform: "Win32" }]]) {
-    const storage = memoryStorage(); saveUiSettings({ interface: savedInterface, glassTransparency: 31 }, storage);
+test("все режимы эффектов сохраняются и восстанавливаются без повторного определения ОС", () => {
+  for (const [savedInterface, navigatorLike] of [["classic", { platform: "MacIntel" }], ["modern", { platform: "Win32" }]]) for (const glassEffects of ["full", "reduced", "none"]) {
+    const storage = memoryStorage(); saveUiSettings({ interface: savedInterface, glassTransparency: 31, glassEffects }, storage);
     let detections = 0;
     const settings = initializeUiSettings({ storage, navigatorLike, detect: () => { detections += 1; return "classic"; } });
-    assert.equal(settings.interface, savedInterface); assert.equal(settings.glassTransparency, 31); assert.equal(detections, 0);
+    assert.deepEqual(settings, { interface: savedInterface, glassTransparency: 31, glassEffects }); assert.equal(detections, 0);
   }
 });
 
-test("ручной выбор перезаписывается, следующий запуск не определяет ОС, а очистка запускает выбор снова", () => {
+test("ручной выбор режима и интерфейса перезаписывается, а прозрачность остаётся независимой", () => {
   const storage = memoryStorage(); let detections = 0;
   const detect = () => { detections += 1; return "classic"; };
   initializeUiSettings({ storage, detect });
-  saveUiSettings({ interface: "modern", glassTransparency: 45 }, storage);
-  assert.equal(initializeUiSettings({ storage, detect }).interface, "modern"); assert.equal(detections, 1);
+  saveUiSettings({ interface: "modern", glassTransparency: 45, glassEffects: "reduced" }, storage);
+  saveUiSettings({ ...readUiSettings(storage), glassEffects: "none" }, storage);
+  assert.deepEqual(initializeUiSettings({ storage, detect }), { interface: "modern", glassTransparency: 45, glassEffects: "none" }); assert.equal(detections, 1);
+  saveUiSettings({ ...readUiSettings(storage), interface: "classic" }, storage);
+  assert.deepEqual(readUiSettings(storage), { interface: "classic", glassTransparency: 45, glassEffects: "none" });
+  saveUiSettings({ ...readUiSettings(storage), interface: "modern" }, storage);
+  assert.deepEqual(readUiSettings(storage), { interface: "modern", glassTransparency: 45, glassEffects: "none" });
   storage.removeItem(UI_SETTINGS_KEY);
   assert.equal(initializeUiSettings({ storage, detect }).interface, "classic"); assert.equal(detections, 2);
 });
 
-test("повреждённая настройка безопасно заменяется и не хранит источник выбора", () => {
+test("повреждённая или неизвестная настройка безопасно заменяется и не хранит источник выбора", () => {
   const storage = memoryStorage(); storage.setItem(UI_SETTINGS_KEY, "{broken");
   const settings = initializeUiSettings({ storage, detect: () => "classic" });
-  assert.deepEqual(settings, { interface: "classic", glassTransparency: 25 });
+  assert.deepEqual(settings, { interface: "classic", glassTransparency: 25, glassEffects: "reduced" });
+  storage.setItem(UI_SETTINGS_KEY, JSON.stringify({ interface: "modern", glassTransparency: 37, glassEffects: "turbo" }));
+  assert.deepEqual(initializeUiSettings({ storage, detect: () => "classic" }), { interface: "modern", glassTransparency: 37, glassEffects: "reduced" });
   const persisted = JSON.parse(storage.getItem(UI_SETTINGS_KEY));
-  assert.deepEqual(Object.keys(persisted).sort(), ["glassTransparency", "interface"]);
+  assert.deepEqual(Object.keys(persisted).sort(), ["glassEffects", "glassTransparency", "interface"]);
   assert.equal(JSON.stringify(persisted).includes("auto"), false); assert.equal(JSON.stringify(persisted).includes("manual"), false);
 });
 
-test("backup v8 экспортирует данные и настройки интерфейса без ОС и источника выбора", () => {
+test("режим применяется атрибутом темы и сохраняется при классическом интерфейсе", () => {
+  const properties = new Map();
+  const root = { dataset: {}, style: { setProperty: (name, value) => properties.set(name, value) } };
+  applyUiSettings({ interface: "classic", glassTransparency: 45, glassEffects: "reduced" }, root);
+  assert.deepEqual(root.dataset, { interface: "classic", glassEffects: "reduced" });
+  assert.equal(properties.get("--glass-transparency"), "45%");
+  applyUiSettings({ interface: "modern", glassTransparency: 45, glassEffects: "reduced" }, root);
+  assert.deepEqual(root.dataset, { interface: "modern", glassEffects: "reduced" });
+});
+
+test("прозрачность допускает плавный дробный preview, но сохраняется целым процентом", () => {
+  const properties = new Map();
+  const root = { style: { setProperty: (name, value) => properties.set(name, value) } };
+  assert.equal(applyGlassTransparency(27.42, root), 27.42);
+  assert.equal(properties.get("--glass-transparency"), "27.42%");
+  assert.equal(properties.get("--glass-opacity"), "72.58%");
+  assert.equal(saveUiSettings({ interface: "modern", glassTransparency: Math.round(27.42), glassEffects: "reduced" }, memoryStorage()).glassTransparency, 27);
+});
+
+test("CSS ограничивает профили современным интерфейсом и полностью отключает blur в none", () => {
+  const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
+  for (const line of css.split(/\r?\n/).filter((line) => line.includes("data-glass-effects"))) assert.match(line, /data-interface="modern"/);
+  assert.match(css, /data-glass-effects="reduced"[^}]+backdrop-filter: none !important/s);
+  assert.match(css, /data-glass-effects="reduced"\] \.app-header \{ backdrop-filter: saturate\(125%\) blur\(12px\)/);
+  assert.match(css, /data-glass-effects="none"[^}]+backdrop-filter: none !important/s);
+  assert.doesNotMatch(css, /transition:[^;]*(?:backdrop-filter|filter)/);
+  assert.doesNotMatch(css, /will-change/);
+});
+
+test("backup v9 экспортирует все режимы независимо от интерфейса без сведений об устройстве", () => {
   const data = { ...emptyBackupData, profile: { id: "profile", heightCm: 180 }, weightMeasurements: [{ id: "w1", weight: 80 }], pressureMeasurements: [{ id: "p1", systolic: 120 }] };
-  for (const interfaceName of ["classic", "modern"]) for (const transparency of [10, 25, 45]) {
-    const payload = createBackupPayload(data, { interface: interfaceName, glassTransparency: transparency }, "2026-08-21T10:15:30.000Z");
-    assert.equal(payload.version, 8); assert.equal(payload.exportedAt, "2026-08-21T10:15:30.000Z");
+  for (const interfaceName of ["classic", "modern"]) for (const transparency of [10, 25, 45]) for (const glassEffects of ["full", "reduced", "none"]) {
+    const payload = createBackupPayload(data, { interface: interfaceName, glassTransparency: transparency, glassEffects }, "2026-08-21T10:15:30.000Z");
+    assert.equal(payload.version, 9); assert.equal(payload.exportedAt, "2026-08-21T10:15:30.000Z");
     assert.equal(payload.profile.heightCm, 180); assert.equal(payload.weightMeasurements[0].weight, 80); assert.equal(payload.pressureMeasurements[0].systolic, 120);
-    assert.deepEqual(payload.settings, { interface: interfaceName, glassTransparency: transparency });
-    const json = JSON.stringify(payload); assert.equal(/auto|manual|operatingSystem|userAgent/i.test(json), false);
+    assert.deepEqual(payload.settings, { interface: interfaceName, glassTransparency: transparency, glassEffects });
+    const json = JSON.stringify(payload); assert.equal(/"(?:auto|manual|detected|device|deviceModel|model|operatingSystem|userAgent|source)"\s*:/i.test(json), false);
   }
 });
 
-test("backup v8 проходит полный цикл разбора и восстанавливает настройки", async () => {
+test("backup v9 проходит полный цикл и восстанавливает каждый режим", async () => {
   const record = { id: "w1", measuredAt: "2026-08-20T08:00:00.000Z", editedAt: "2026-08-20T08:01:00.000Z", weight: 82, comment: "" };
-  const payload = createBackupPayload({ ...emptyBackupData, weightMeasurements: [record] }, { interface: "modern", glassTransparency: 37 }, "2026-08-21T10:15:30.000Z");
-  const parsed = await parseBackupFile(backupFile(payload));
-  assert.equal(parsed.weightMeasurements[0].weight, 82); assert.deepEqual(parsed.uiSettings, { interface: "modern", glassTransparency: 37 });
+  for (const glassEffects of ["full", "reduced", "none"]) {
+    const payload = createBackupPayload({ ...emptyBackupData, weightMeasurements: [record] }, { interface: "modern", glassTransparency: 37, glassEffects }, "2026-08-21T10:15:30.000Z");
+    const parsed = await parseBackupFile(backupFile(payload));
+    assert.equal(parsed.weightMeasurements[0].weight, 82); assert.deepEqual(parsed.uiSettings, { interface: "modern", glassTransparency: 37, glassEffects });
+  }
 });
 
-test("backup v8 отклоняет некорректный интерфейс, прозрачность и JSON до применения", async () => {
-  const valid = createBackupPayload(emptyBackupData, { interface: "classic", glassTransparency: 25 }, "2026-08-21T10:15:30.000Z");
-  for (const settings of [{ interface: "automatic", glassTransparency: 25 }, { interface: "modern", glassTransparency: 9 }, { interface: "modern", glassTransparency: 46 }]) {
+test("backup v9 отклоняет некорректный режим и повреждённый JSON без изменения текущего состояния", async () => {
+  const valid = createBackupPayload(emptyBackupData, { interface: "classic", glassTransparency: 25, glassEffects: "full" }, "2026-08-21T10:15:30.000Z");
+  for (const settings of [{ interface: "automatic", glassTransparency: 25, glassEffects: "full" }, { interface: "modern", glassTransparency: 9, glassEffects: "full" }, { interface: "modern", glassTransparency: 46, glassEffects: "full" }]) {
     await assert.rejects(() => parseBackupFile(backupFile({ ...valid, settings })), /настройки интерфейса/);
   }
+  for (const glassEffects of ["turbo", null, 1]) await assert.rejects(() => parseBackupFile(backupFile({ ...valid, settings: { ...valid.settings, glassEffects } })), /режим эффектов/);
+  const current = { records: ["unchanged"], settings: { interface: "modern", glassTransparency: 45, glassEffects: "none" } };
   await assert.rejects(() => parseBackupFile({ size: 8, text: async () => "{broken" }), /прочитать JSON/);
+  assert.deepEqual(current, { records: ["unchanged"], settings: { interface: "modern", glassTransparency: 45, glassEffects: "none" } });
 });
 
-test("старая резервная копия не удаляет текущие настройки интерфейса", async () => {
+test("старые резервные копии импортируются без сброса отсутствующего режима", async () => {
   const legacy = { format: "health-diary-backup", version: 7, exportedAt: "2026-08-17T08:00:00Z", ...emptyBackupData };
   const parsed = await parseBackupFile(backupFile(legacy));
   assert.equal(parsed.uiSettings, null);
+  const version8 = { ...legacy, version: 8, settings: { interface: "classic", glassTransparency: 31 } };
+  const parsed8 = await parseBackupFile(backupFile(version8));
+  assert.deepEqual(parsed8.uiSettings, { interface: "classic", glassTransparency: 31 });
+  assert.deepEqual({ interface: "modern", glassTransparency: 45, glassEffects: "reduced", ...parsed8.uiSettings }, { interface: "classic", glassTransparency: 31, glassEffects: "reduced" });
+  const storageWithoutCurrentMode = memoryStorage();
+  assert.deepEqual(saveUiSettings(parsed8.uiSettings, storageWithoutCurrentMode), { interface: "classic", glassTransparency: 31, glassEffects: "reduced" });
 });

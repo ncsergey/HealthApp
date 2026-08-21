@@ -1,7 +1,7 @@
 import { isFuture } from "./datetime.js";
 import { DEFAULT_BODY_PARTS, MEDICATION_AMOUNT_MAX, MEDICATION_AMOUNT_MIN, UNIT_BY_ID, normalizeDirectoryName, normalizedNameKey, stableNameId } from "./pain.js";
 import { FOOD_RELATIONS, isValidDateOnly, isValidScheduleTime, validateMedicationCourse } from "./medications.js";
-import { isValidGlassTransparency, isValidInterface } from "./interface-settings.js";
+import { isValidGlassEffects, isValidGlassTransparency, isValidInterface } from "./interface-settings.js";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const MAX_TEXT_LENGTH = 100_000;
@@ -107,9 +107,10 @@ export async function parseBackupFile(file) {
   if (!file) throw new Error("Файл не выбран."); if (file.size > MAX_FILE_SIZE) throw new Error("Файл слишком большой (максимум 20 МБ).");
   let raw; try { raw = JSON.parse(await file.text()); } catch { throw new Error("Не удалось прочитать JSON-файл."); }
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("Некорректная структура резервной копии.");
-  if (raw.format !== "health-diary-backup" || ![1, 2, 3, 4, 5, 6, 7, 8].includes(raw.version)) throw new Error("Неподдерживаемый формат или версия резервной копии.");
-  if (raw.version === 8 && (typeof raw.exportedAt !== "string" || !Number.isFinite(Date.parse(raw.exportedAt)))) throw new Error("Некорректная дата экспорта резервной копии.");
-  if (raw.version === 8 && (!raw.settings || typeof raw.settings !== "object" || Array.isArray(raw.settings) || !isValidInterface(raw.settings.interface) || !isValidGlassTransparency(raw.settings.glassTransparency))) throw new Error("Некорректные настройки интерфейса в резервной копии.");
+  if (raw.format !== "health-diary-backup" || ![1, 2, 3, 4, 5, 6, 7, 8, 9].includes(raw.version)) throw new Error("Неподдерживаемый формат или версия резервной копии.");
+  if (raw.version >= 8 && (typeof raw.exportedAt !== "string" || !Number.isFinite(Date.parse(raw.exportedAt)))) throw new Error("Некорректная дата экспорта резервной копии.");
+  if (raw.version >= 8 && (!raw.settings || typeof raw.settings !== "object" || Array.isArray(raw.settings) || !isValidInterface(raw.settings.interface) || !isValidGlassTransparency(raw.settings.glassTransparency))) throw new Error("Некорректные настройки интерфейса в резервной копии.");
+  if (raw.version >= 9 && !isValidGlassEffects(raw.settings.glassEffects)) throw new Error("Некорректный режим эффектов Liquid Glass в резервной копии.");
   const painSource = raw.version >= 6 ? raw.painEpisodes : raw.headacheEpisodes;
   if (!Array.isArray(raw.pressureMeasurements) || !Array.isArray(painSource)) throw new Error("В резервной копии отсутствуют необходимые массивы.");
   if (raw.version >= 2 && (!Array.isArray(raw.glucoseMeasurements) || !Array.isArray(raw.weightMeasurements))) throw new Error(`В резервной копии версии ${raw.version} отсутствуют необходимые массивы.`);
@@ -131,7 +132,11 @@ export async function parseBackupFile(file) {
     pressureMeasurements: legacyPressure ? legacyPressure.map((item) => item.pressure) : raw.pressureMeasurements.map(validatePressure),
     pulseMeasurements: legacyPressure ? legacyPressure.map((item) => item.pulse) : raw.pulseMeasurements.map((record, index) => validatePulse(record, index, raw.version === 3)),
     painEpisodes, glucoseMeasurements: raw.version >= 2 ? raw.glucoseMeasurements.map(validateGlucose) : [], weightMeasurements: raw.version >= 2 ? raw.weightMeasurements.map(validateWeight) : [], bodyParts, medications, medicationCourses, medicationIntakes,
-    uiSettings: raw.version === 8 ? { interface: raw.settings.interface, glassTransparency: raw.settings.glassTransparency } : null };
+    uiSettings: raw.version >= 8 ? {
+      interface: raw.settings.interface,
+      glassTransparency: raw.settings.glassTransparency,
+      ...(raw.version >= 9 ? { glassEffects: raw.settings.glassEffects } : {})
+    } : null };
   for (const [key, label] of [["pressureMeasurements", "давление"], ["pulseMeasurements", "пульс"], ["painEpisodes", "боль"], ["glucoseMeasurements", "глюкоза"], ["weightMeasurements", "вес"], ["medicationCourses", "курсы"], ["medicationIntakes", "приёмы"]]) assertUniqueIds(data[key], label);
   data.headacheEpisodes = data.painEpisodes;
   return data;
