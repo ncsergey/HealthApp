@@ -5,6 +5,6 @@
   "type": "module",
   "scripts": {
     "test": "node --test tests/core.test.mjs",
-    "check": "node --check js/app.js && node --check sw.js"
+    "check": "node --check js/app.js && node --check js/db.js && node --check js/export.js && node --check js/import.js && node --check js/interface-settings.js && node --check sw.js"
   }
 }

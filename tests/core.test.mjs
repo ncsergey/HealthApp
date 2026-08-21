@@ -7,6 +7,23 @@ import { ageOnDate, calculateBmi, evaluateBmi, evaluateGlucose, evaluatePressure
 import { formatMedicationDose, hasOngoingPainForBodyPart, normalizedNameKey, parseMedicationAmount } from "../js/pain.js";
 import { filterDataForPeriod, glucoseStats, headacheStats, overviewStats, pressureStats, pulseStats, weightStats } from "../js/statistics.js";
 import { buildDaySchedule, dayPartForTime, isCourseCompletedOn, medicationStatistics, normalizeSchedule, validateMedicationCourse } from "../js/medications.js";
+import { createBackupPayload } from "../js/export.js";
+import { DEFAULT_GLASS_TRANSPARENCY, UI_SETTINGS_KEY, initializeUiSettings, readUiSettings, saveUiSettings } from "../js/interface-settings.js";
+
+function memoryStorage() {
+  const values = new Map();
+  return { getItem: (key) => values.has(key) ? values.get(key) : null, setItem: (key, value) => values.set(key, String(value)), removeItem: (key) => values.delete(key) };
+}
+
+function backupFile(payload) {
+  const text = JSON.stringify(payload);
+  return { size: text.length, text: async () => text };
+}
+
+const emptyBackupData = Object.freeze({
+  profile: null, pressureMeasurements: [], pulseMeasurements: [], painEpisodes: [], glucoseMeasurements: [], weightMeasurements: [],
+  bodyParts: [], medications: [], medicationCourses: [], medicationIntakes: []
+});
 
 test("московское время сохраняется в UTC", () => {
   assert.equal(moscowInputToIso("2026-08-10", "08:30"), "2026-08-10T05:30:00.000Z");
@@ -390,4 +407,84 @@ test("backup версии 7 проверяет курсы и историю пр
   assert.equal(parsed.medicationIntakes[0].status, "taken");
   const invalid = structuredClone(backup); invalid.medicationCourses[0].schedule = ["09:00", "09:00"];
   await assert.rejects(() => parseBackupFile({ size: 2000, text: async () => JSON.stringify(invalid) }), /повторяться/);
+});
+
+test("первичный интерфейс выбирается по надёжным признакам ОС и сразу сохраняется", () => {
+  const cases = [
+    [{ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)", platform: "iPhone" }, "modern"],
+    [{ userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15)", platform: "MacIntel", maxTouchPoints: 5 }, "modern"],
+    [{ userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_0)", platform: "MacIntel", maxTouchPoints: 0 }, "modern"],
+    [{ userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)", platform: "Win32" }, "classic"],
+    [{ userAgent: "Mozilla/5.0 (Linux; Android 15)", platform: "Linux armv8l", maxTouchPoints: 5 }, "classic"],
+    [{ userAgent: "Mozilla/5.0 (X11; Linux x86_64)", platform: "Linux x86_64" }, "classic"],
+    [{ userAgent: "Unknown", platform: "Unknown" }, "classic"],
+    [{ userAgent: "Mozilla/5.0 (Windows NT 10.0) Macintosh", platform: "MacIntel" }, "classic"]
+  ];
+  for (const [navigatorLike, expected] of cases) {
+    const storage = memoryStorage();
+    const settings = initializeUiSettings({ storage, navigatorLike });
+    assert.equal(settings.interface, expected);
+    assert.equal(readUiSettings(storage).interface, expected);
+    assert.equal(settings.glassTransparency, DEFAULT_GLASS_TRANSPARENCY);
+  }
+});
+
+test("сохранённый интерфейс применяется без определения ОС", () => {
+  for (const [savedInterface, navigatorLike] of [["classic", { platform: "MacIntel" }], ["modern", { platform: "Win32" }]]) {
+    const storage = memoryStorage(); saveUiSettings({ interface: savedInterface, glassTransparency: 31 }, storage);
+    let detections = 0;
+    const settings = initializeUiSettings({ storage, navigatorLike, detect: () => { detections += 1; return "classic"; } });
+    assert.equal(settings.interface, savedInterface); assert.equal(settings.glassTransparency, 31); assert.equal(detections, 0);
+  }
+});
+
+test("ручной выбор перезаписывается, следующий запуск не определяет ОС, а очистка запускает выбор снова", () => {
+  const storage = memoryStorage(); let detections = 0;
+  const detect = () => { detections += 1; return "classic"; };
+  initializeUiSettings({ storage, detect });
+  saveUiSettings({ interface: "modern", glassTransparency: 45 }, storage);
+  assert.equal(initializeUiSettings({ storage, detect }).interface, "modern"); assert.equal(detections, 1);
+  storage.removeItem(UI_SETTINGS_KEY);
+  assert.equal(initializeUiSettings({ storage, detect }).interface, "classic"); assert.equal(detections, 2);
+});
+
+test("повреждённая настройка безопасно заменяется и не хранит источник выбора", () => {
+  const storage = memoryStorage(); storage.setItem(UI_SETTINGS_KEY, "{broken");
+  const settings = initializeUiSettings({ storage, detect: () => "classic" });
+  assert.deepEqual(settings, { interface: "classic", glassTransparency: 25 });
+  const persisted = JSON.parse(storage.getItem(UI_SETTINGS_KEY));
+  assert.deepEqual(Object.keys(persisted).sort(), ["glassTransparency", "interface"]);
+  assert.equal(JSON.stringify(persisted).includes("auto"), false); assert.equal(JSON.stringify(persisted).includes("manual"), false);
+});
+
+test("backup v8 экспортирует данные и настройки интерфейса без ОС и источника выбора", () => {
+  const data = { ...emptyBackupData, profile: { id: "profile", heightCm: 180 }, weightMeasurements: [{ id: "w1", weight: 80 }], pressureMeasurements: [{ id: "p1", systolic: 120 }] };
+  for (const interfaceName of ["classic", "modern"]) for (const transparency of [10, 25, 45]) {
+    const payload = createBackupPayload(data, { interface: interfaceName, glassTransparency: transparency }, "2026-08-21T10:15:30.000Z");
+    assert.equal(payload.version, 8); assert.equal(payload.exportedAt, "2026-08-21T10:15:30.000Z");
+    assert.equal(payload.profile.heightCm, 180); assert.equal(payload.weightMeasurements[0].weight, 80); assert.equal(payload.pressureMeasurements[0].systolic, 120);
+    assert.deepEqual(payload.settings, { interface: interfaceName, glassTransparency: transparency });
+    const json = JSON.stringify(payload); assert.equal(/auto|manual|operatingSystem|userAgent/i.test(json), false);
+  }
+});
+
+test("backup v8 проходит полный цикл разбора и восстанавливает настройки", async () => {
+  const record = { id: "w1", measuredAt: "2026-08-20T08:00:00.000Z", editedAt: "2026-08-20T08:01:00.000Z", weight: 82, comment: "" };
+  const payload = createBackupPayload({ ...emptyBackupData, weightMeasurements: [record] }, { interface: "modern", glassTransparency: 37 }, "2026-08-21T10:15:30.000Z");
+  const parsed = await parseBackupFile(backupFile(payload));
+  assert.equal(parsed.weightMeasurements[0].weight, 82); assert.deepEqual(parsed.uiSettings, { interface: "modern", glassTransparency: 37 });
+});
+
+test("backup v8 отклоняет некорректный интерфейс, прозрачность и JSON до применения", async () => {
+  const valid = createBackupPayload(emptyBackupData, { interface: "classic", glassTransparency: 25 }, "2026-08-21T10:15:30.000Z");
+  for (const settings of [{ interface: "automatic", glassTransparency: 25 }, { interface: "modern", glassTransparency: 9 }, { interface: "modern", glassTransparency: 46 }]) {
+    await assert.rejects(() => parseBackupFile(backupFile({ ...valid, settings })), /настройки интерфейса/);
+  }
+  await assert.rejects(() => parseBackupFile({ size: 8, text: async () => "{broken" }), /прочитать JSON/);
+});
+
+test("старая резервная копия не удаляет текущие настройки интерфейса", async () => {
+  const legacy = { format: "health-diary-backup", version: 7, exportedAt: "2026-08-17T08:00:00Z", ...emptyBackupData };
+  const parsed = await parseBackupFile(backupFile(legacy));
+  assert.equal(parsed.uiSettings, null);
 });

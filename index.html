@@ -14,10 +14,16 @@
   <link rel="apple-touch-icon" href="./icons/icon-192.png">
   <link rel="icon" href="./icons/icon-192.png">
   <link rel="stylesheet" href="./css/app.css">
+  <script>
+    try {
+      const savedUi = JSON.parse(localStorage.getItem("myhealth:ui-settings:v1"));
+      if (savedUi && (savedUi.interface === "classic" || savedUi.interface === "modern")) document.documentElement.dataset.interface = savedUi.interface;
+    } catch { /* The module initializer repairs missing or damaged settings. */ }
+  </script>
 </head>
 <body>
   <header class="app-header">
-    <div class="brand"><span id="brand-icon-container" class="brand-icon-container" aria-hidden="true"><img class="brand-icon" src="./icons/icon-192.png" alt=""><span class="brand-emoji" hidden></span></span><div><p class="eyebrow">Дневник здоровья · <button id="app-version" class="app-version" type="button" disabled aria-label="Версия v115">v115</button></p><h1>MyHealth</h1></div></div>
+    <div class="brand"><span id="brand-icon-container" class="brand-icon-container" aria-hidden="true"><img class="brand-icon" src="./icons/icon-192.png" alt=""><span class="brand-emoji" hidden></span></span><div><p class="eyebrow">Дневник здоровья · <button id="app-version" class="app-version" type="button" disabled aria-label="Версия v118">v118</button></p><h1>MyHealth</h1></div></div>
     <div class="header-actions"><button id="settings-button" class="icon-button" type="button" data-view="settings" data-settings-root aria-label="Настройки" title="Настройки"><span aria-hidden="true">⚙️</span></button></div>
   </header>
 
@@ -60,7 +66,27 @@
       <div class="section-heading"><div><p class="eyebrow">Управление приложением</p><h2 id="settings-heading">Настройки</h2></div></div>
       <div class="settings-grid">
         <button class="settings-card" type="button" data-settings-target="profile"><span class="settings-icon" aria-hidden="true">👤</span><span class="settings-main"><strong>Аккаунт</strong><small>Личные данные пользователя</small></span><span class="settings-chevron" aria-hidden="true">›</span></button>
+        <button class="settings-card" type="button" data-settings-target="interface"><span class="settings-icon" aria-hidden="true">🎨</span><span class="settings-main"><strong>Интерфейс</strong><small>Смена оформления</small></span><span class="settings-chevron" aria-hidden="true">›</span></button>
         <button class="settings-card" type="button" data-settings-target="backup"><span class="settings-icon" aria-hidden="true">💾</span><span class="settings-main"><strong>Резервная копия</strong><small>Экспорт и импорт данных</small></span><span class="settings-chevron" aria-hidden="true">›</span></button>
+      </div>
+    </section>
+    <section id="interface-view" class="view" aria-labelledby="interface-heading" hidden>
+      <div class="section-heading"><div><p class="eyebrow">Внешний вид приложения</p><h2 id="interface-heading">Интерфейс</h2></div></div>
+      <button id="interface-back" class="back-button" type="button"><span aria-hidden="true">‹</span> К настройкам</button>
+      <div class="interface-options" role="radiogroup" aria-label="Выбор оформления">
+        <button class="interface-option" type="button" data-interface-choice="classic" role="radio" aria-checked="false">
+          <span class="interface-preview classic-preview" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="interface-option-main"><strong>Классический</strong><small>Привычное строгое оформление</small></span><span class="selection-mark" aria-hidden="true">✓</span>
+        </button>
+        <button class="interface-option" type="button" data-interface-choice="modern" role="radio" aria-checked="false">
+          <span class="interface-preview modern-preview" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="interface-option-main"><strong>Современный</strong><small>Многослойный эффект Liquid Glass</small></span><span class="selection-mark" aria-hidden="true">✓</span>
+        </button>
+      </div>
+      <div id="glass-transparency-card" class="transparency-card">
+        <div class="transparency-heading"><div><strong>Прозрачность стекла</strong><small>Применяется ко всем стеклянным поверхностям</small></div><output id="glass-transparency-value" for="glass-transparency">25%</output></div>
+        <input id="glass-transparency" type="range" min="10" max="45" step="1" value="25" aria-label="Прозрачность стекла в процентах">
+        <div class="range-labels" aria-hidden="true"><span>10%</span><span>45%</span></div>
       </div>
     </section>
     <section id="profile-view" class="view" aria-labelledby="profile-heading" hidden>

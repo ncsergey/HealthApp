@@ -8,6 +8,7 @@ import { ageOnDate, calculateBmi, evaluateBmi, evaluateGlucose, evaluatePressure
 import { createElement as el, debounce, finiteInteger, makeId } from "./utils.js";
 import { DEFAULT_BODY_PARTS, UNIT_BY_ID, directoryItemById, formatMedicationAmount, formatMedicationDose, hasOngoingPainForBodyPart, normalizedNameKey, parseMedicationAmount, validateDirectoryName } from "./pain.js";
 import { DAY_PARTS, FOOD_RELATIONS, buildDaySchedule, isCourseCompletedOn, validateMedicationCourse } from "./medications.js";
+import { DEFAULT_GLASS_TRANSPARENCY, applyUiSettings, detectInitialInterface, initializeUiSettings, saveUiSettings } from "./interface-settings.js";
 
 const PAGE_SIZE = 60;
 const BIRTHDAY_EMOJIS = Object.freeze(["🎉", "🥳", "🎂", "🎊", "🎈", "🎁", "🍰"]);
@@ -23,15 +24,21 @@ let backupPendingFallback = false;
 let backupReminderDismissedFallback = false;
 let modalScrollY = 0;
 
+const initialUiSettings = (() => {
+  try { return initializeUiSettings(); }
+  catch { return { interface: detectInitialInterface(globalThis.navigator), glassTransparency: DEFAULT_GLASS_TRANSPARENCY }; }
+})();
+applyUiSettings(initialUiSettings);
+
 const state = {
   data: { profile: null, pressureMeasurements: [], pulseMeasurements: [], painEpisodes: [], glucoseMeasurements: [], weightMeasurements: [], bodyParts: [], medications: [], medicationCourses: [], medicationIntakes: [] },
   diaryFilter: "all", diaryLimit: PAGE_SIZE, statsMetric: "overview", pendingImport: null,
   pressureWarningAccepted: false, chartObservers: [], glucoseContext: "all", glucoseFormat: "all", painBodyPart: "all", directoryContext: null, activeDirectory: null,
-  medicationTab: "today", medicationDate: getMoscowFields().date
+  medicationTab: "today", medicationDate: getMoscowFields().date, uiSettings: initialUiSettings
 };
 
 const elements = {
-  diaryView: document.querySelector("#diary-view"), statsView: document.querySelector("#stats-view"), settingsView: document.querySelector("#settings-view"), profileView: document.querySelector("#profile-view"), backupView: document.querySelector("#backup-view"), directoriesView: document.querySelector("#directories-view"), medicationsView: document.querySelector("#medications-view"),
+  diaryView: document.querySelector("#diary-view"), statsView: document.querySelector("#stats-view"), settingsView: document.querySelector("#settings-view"), profileView: document.querySelector("#profile-view"), interfaceView: document.querySelector("#interface-view"), backupView: document.querySelector("#backup-view"), directoriesView: document.querySelector("#directories-view"), medicationsView: document.querySelector("#medications-view"),
   diaryList: document.querySelector("#diary-list"), diaryFilterSelect: document.querySelector("#diary-filter-select"), loadMore: document.querySelector("#load-more-button"),
   statsContent: document.querySelector("#stats-content"), statsSubfilters: document.querySelector("#stats-subfilters"), statsBack: document.querySelector("#stats-back"),
   statsPeriod: document.querySelector("#stats-period"), customPeriod: document.querySelector("#custom-period"), periodStart: document.querySelector("#period-start"), periodEnd: document.querySelector("#period-end"),
@@ -46,6 +53,35 @@ function showToast(message) {
 }
 
 function showError(container, error) { container.textContent = error instanceof Error ? error.message : String(error); }
+
+function renderInterfaceSettings() {
+  for (const option of document.querySelectorAll("[data-interface-choice]")) {
+    const selected = option.dataset.interfaceChoice === state.uiSettings.interface;
+    option.classList.toggle("selected", selected); option.setAttribute("aria-checked", String(selected));
+  }
+  const transparency = document.querySelector("#glass-transparency");
+  transparency.value = String(state.uiSettings.glassTransparency);
+  document.querySelector("#glass-transparency-value").value = `${state.uiSettings.glassTransparency}%`;
+  document.querySelector("#glass-transparency-card").hidden = state.uiSettings.interface !== "modern";
+}
+
+function persistUiSettings(nextSettings) {
+  const saved = saveUiSettings(nextSettings);
+  state.uiSettings = applyUiSettings(saved);
+  renderInterfaceSettings();
+}
+
+async function importWithUiSettings(importedSettings, importData) {
+  const previousSettings = state.uiSettings;
+  if (importedSettings) persistUiSettings(importedSettings); // A storage failure leaves application data untouched.
+  try { return await importData(); }
+  catch (error) {
+    if (importedSettings) {
+      try { persistUiSettings(previousSettings); } catch { /* Keep the original import error. */ }
+    }
+    throw error;
+  }
+}
 function isBackupPending() { try { return localStorage.getItem(BACKUP_PENDING_KEY) === "1"; } catch { return backupPendingFallback; } }
 function isBackupReminderDismissed() { try { return localStorage.getItem(BACKUP_REMINDER_DISMISSED_KEY) === "1"; } catch { return backupReminderDismissedFallback; } }
 function dismissBackupReminder() { backupReminderDismissedFallback = true; try { localStorage.setItem(BACKUP_REMINDER_DISMISSED_KEY, "1"); } catch { /* fallback in memory */ } }
@@ -859,13 +895,14 @@ async function handleMedicationAction(event) {
 }
 
 function switchView(view) {
-  const views = { diary: elements.diaryView, stats: elements.statsView, settings: elements.settingsView, profile: elements.profileView, backup: elements.backupView, directories: elements.directoriesView, medications: elements.medicationsView };
+  const views = { diary: elements.diaryView, stats: elements.statsView, settings: elements.settingsView, profile: elements.profileView, interface: elements.interfaceView, backup: elements.backupView, directories: elements.directoriesView, medications: elements.medicationsView };
   if (!views[view]) return;
   for (const [name, section] of Object.entries(views)) section.hidden = name !== view;
-  const settingsActive = ["settings", "profile", "backup"].includes(view);
+  const settingsActive = ["settings", "profile", "interface", "backup"].includes(view);
   document.querySelectorAll("[data-view]").forEach((button) => { const active = button.dataset.view === view || (button.hasAttribute("data-settings-root") && settingsActive); button.classList.toggle("active", active); if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current"); });
   if (view === "stats") { state.statsMetric = "overview"; renderStatistics(); }
   if (view === "profile") renderProfile();
+  if (view === "interface") renderInterfaceSettings();
   if (view === "backup") document.querySelector("#data-error").textContent = "";
   if (view === "directories") { state.activeDirectory = null; renderDirectories(); }
   if (view === "medications") { state.medicationTab = "today"; state.medicationDate = getMoscowFields().date; renderMedications(); }
@@ -884,17 +921,17 @@ async function handleImportFile(event) {
 
 async function mergeImport() {
   if (!state.pendingImport) return; const button = document.querySelector("#import-merge"); const errorNode = document.querySelector("#import-error"); errorNode.textContent = ""; setBusy(button, true, "Импорт…");
-  try { const result = await mergeData(state.pendingImport); state.pendingImport = null; closeDialog(document.querySelector("#import-dialog")); await refreshData(); handleSuccessfulDataChange(`Импорт завершён · обновлено ${result.imported}`); } catch (error) { showError(errorNode, error); } finally { setBusy(button, false); }
+  try { const importedSettings = state.pendingImport.uiSettings; const result = await importWithUiSettings(importedSettings, () => mergeData(state.pendingImport)); state.pendingImport = null; closeDialog(document.querySelector("#import-dialog")); await refreshData(); handleSuccessfulDataChange(`Импорт завершён · обновлено ${result.imported}`); } catch (error) { showError(errorNode, error); } finally { setBusy(button, false); }
 }
 
 async function replaceImport() {
   if (!state.pendingImport) return; if (!await confirmAction({ title: "Заменить все данные?", message: "Все текущие данные будут заменены данными из резервной копии. Это действие нельзя отменить.", confirmLabel: "Заменить" })) return;
   const button = document.querySelector("#import-replace"); const errorNode = document.querySelector("#import-error"); errorNode.textContent = ""; setBusy(button, true, "Импорт…");
-  try { await replaceAllData(state.pendingImport); state.pendingImport = null; closeDialog(document.querySelector("#import-dialog")); await refreshData(); clearBackupPending(); showToast("Данные полностью восстановлены"); } catch (error) { showError(errorNode, error); } finally { setBusy(button, false); }
+  try { const importedSettings = state.pendingImport.uiSettings; await importWithUiSettings(importedSettings, () => replaceAllData(state.pendingImport)); state.pendingImport = null; closeDialog(document.querySelector("#import-dialog")); await refreshData(); clearBackupPending(); showToast("Данные полностью восстановлены"); } catch (error) { showError(errorNode, error); } finally { setBusy(button, false); }
 }
 
 function updateOnlineStatus() { elements.offlineBanner.hidden = navigator.onLine; }
-async function savePromptedBackup() { const button = document.querySelector("#backup-save"); const errorNode = document.querySelector("#backup-prompt-error"); errorNode.textContent = ""; setBusy(button, true, "Подготовка…"); try { const completed = await exportJson(state.data); if (!completed) { errorNode.textContent = "Сохранение отменено. Можно повторить или выбрать «Позже»."; return; } clearBackupPending(); closeDialog(document.querySelector("#backup-prompt-dialog")); showToast("Резервная копия сохранена"); } catch (error) { showError(errorNode, error); } finally { setBusy(button, false); } }
+async function savePromptedBackup() { const button = document.querySelector("#backup-save"); const errorNode = document.querySelector("#backup-prompt-error"); errorNode.textContent = ""; setBusy(button, true, "Подготовка…"); try { const completed = await exportJson(state.data, state.uiSettings); if (!completed) { errorNode.textContent = "Сохранение отменено. Можно повторить или выбрать «Позже»."; return; } clearBackupPending(); closeDialog(document.querySelector("#backup-prompt-dialog")); showToast("Резервная копия сохранена"); } catch (error) { showError(errorNode, error); } finally { setBusy(button, false); } }
 function postponeBackupPrompt() { const suppress = document.querySelector("#backup-dont-remind").checked; if (suppress) dismissBackupReminder(); else clearBackupReminderDismissed(); closeDialog(document.querySelector("#backup-prompt-dialog")); showToast(suppress ? "Не напомним до следующего изменения данных" : "Напомним о резервной копии позже"); }
 async function requestPersistentStorage() { if (!navigator.storage?.persist) return; try { elements.storageWarning.hidden = await navigator.storage.persist(); } catch { elements.storageWarning.hidden = false; } }
 function markApplicationUpdateReady() {
@@ -943,7 +980,9 @@ function bindEvents() {
   document.querySelectorAll("dialog.sheet").forEach((dialog) => dialog.addEventListener("click", (event) => { if (event.target === dialog) closeDialog(dialog); }));
   document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view)));
   document.querySelectorAll("[data-settings-target]").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.settingsTarget)));
-  document.querySelector("#profile-back").addEventListener("click", () => switchView("settings")); document.querySelector("#backup-back").addEventListener("click", () => switchView("settings"));
+  document.querySelector("#profile-back").addEventListener("click", () => switchView("settings")); document.querySelector("#interface-back").addEventListener("click", () => switchView("settings")); document.querySelector("#backup-back").addEventListener("click", () => switchView("settings"));
+  document.querySelectorAll("[data-interface-choice]").forEach((button) => button.addEventListener("click", () => { try { persistUiSettings({ ...state.uiSettings, interface: button.dataset.interfaceChoice }); showToast("Оформление изменено"); } catch (error) { showToast(error.message); } }));
+  document.querySelector("#glass-transparency").addEventListener("input", (event) => { try { persistUiSettings({ ...state.uiSettings, glassTransparency: Number(event.currentTarget.value) }); } catch (error) { showToast(error.message); } });
 
   document.querySelectorAll("[data-medication-tab]").forEach((button) => button.addEventListener("click", () => { state.medicationTab = button.dataset.medicationTab; renderMedications(); }));
   elements.medicationCourseAdd.addEventListener("click", () => openMedicationCourseForm()); elements.medicationsContent.addEventListener("click", handleMedicationAction);
@@ -966,14 +1005,14 @@ function bindEvents() {
   elements.statsBack.addEventListener("click", () => { state.statsMetric = "overview"; renderStatistics(); }); elements.statsPeriod.addEventListener("change", () => { elements.customPeriod.hidden = elements.statsPeriod.value !== "custom"; renderStatistics(); }); elements.periodStart.addEventListener("change", renderStatistics); elements.periodEnd.addEventListener("change", renderStatistics);
   elements.statsSubfilters.addEventListener("change", (event) => { if (event.target.id === "glucose-context-filter") state.glucoseContext = event.target.value; if (event.target.id === "glucose-format-filter") state.glucoseFormat = event.target.value; if (event.target.id === "pain-body-part-filter") state.painBodyPart = event.target.value; renderStatistics(); });
   document.querySelector("#export-csv").addEventListener("click", async () => { try { if (await exportCsv(state.data)) showToast("CSV подготовлены"); } catch (error) { showError(document.querySelector("#data-error"), error); } });
-  document.querySelector("#export-json").addEventListener("click", async () => { try { if (await exportJson(state.data)) { clearBackupPending(); showToast("Резервная копия подготовлена"); } } catch (error) { showError(document.querySelector("#data-error"), error); } });
+  document.querySelector("#export-json").addEventListener("click", async () => { try { if (await exportJson(state.data, state.uiSettings)) { clearBackupPending(); showToast("Резервная копия подготовлена"); } } catch (error) { showError(document.querySelector("#data-error"), error); } });
   document.querySelector("#backup-save").addEventListener("click", savePromptedBackup); document.querySelector("#backup-later").addEventListener("click", postponeBackupPrompt); document.querySelector("#backup-prompt-dialog").addEventListener("cancel", (event) => event.preventDefault());
   document.querySelector("#app-version").addEventListener("click", (event) => { if (event.currentTarget.classList.contains("update-ready")) window.location.reload(); });
   document.querySelector("#import-file").addEventListener("change", handleImportFile); document.querySelector("#import-merge").addEventListener("click", mergeImport); document.querySelector("#import-replace").addEventListener("click", replaceImport); window.addEventListener("online", updateOnlineStatus); window.addEventListener("offline", updateOnlineStatus);
 }
 
 async function initialize() {
-  bindEvents(); updateOnlineStatus(); registerServiceWorker();
+  renderInterfaceSettings(); bindEvents(); updateOnlineStatus(); registerServiceWorker();
   try { await openDatabase(); await refreshData(); updateBirthdayBrand(); requestPersistentStorage(); showBackupPrompt(); } catch (error) { elements.diaryList.replaceChildren(emptyState("Не удалось открыть локальные данные", `${error.message} Закройте другие вкладки и попробуйте снова.`, "⚠️")); document.querySelector("#add-button").disabled = true; }
 }
 

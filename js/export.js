@@ -1,5 +1,6 @@
 import { downloadBlob } from "./utils.js";
 import { UNIT_BY_ID, formatMedicationAmount } from "./pain.js";
+import { normalizeUiSettings } from "./interface-settings.js";
 
 function csvCell(value) {
   const text = value === null || value === undefined ? "" : String(value);
@@ -61,12 +62,14 @@ export async function exportCsv(data) {
   return true;
 }
 
-export async function exportJson(data) {
-  const exportedAt = new Date().toISOString();
-  const backup = {
+export function createBackupPayload(data, uiSettings, exportedAt = new Date().toISOString()) {
+  const settings = normalizeUiSettings(uiSettings);
+  if (!settings) throw new Error("Не удалось подготовить настройки интерфейса для резервной копии.");
+  return {
     format: "health-diary-backup",
-    version: 7,
+    version: 8,
     exportedAt,
+    settings,
     profile: data.profile,
     pressureMeasurements: data.pressureMeasurements,
     pulseMeasurements: data.pulseMeasurements,
@@ -78,6 +81,11 @@ export async function exportJson(data) {
     medicationCourses: data.medicationCourses || [],
     medicationIntakes: data.medicationIntakes || []
   };
+}
+
+export async function exportJson(data, uiSettings) {
+  const exportedAt = new Date().toISOString();
+  const backup = createBackupPayload(data, uiSettings, exportedAt);
   const date = exportedAt.slice(0, 10);
   const file = new File([JSON.stringify(backup, null, 2)], `health-diary-backup-${date}.json`, { type: "application/json;charset=utf-8" });
   const shareResult = await shareFiles([file], "Резервная копия MyHealth");
