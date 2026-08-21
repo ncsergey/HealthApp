@@ -53,6 +53,10 @@ export function ageOnDate(birthDate, at = new Date()) {
   return age >= 0 ? age : null;
 }
 
+export function isBirthdayOnDate(birthDate, dateKey) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(birthDate || "") && /^\d{4}-\d{2}-\d{2}$/.test(dateKey || "") && birthDate.slice(5) === dateKey.slice(5);
+}
+
 export function calculateBmi(weightKg, heightCm) {
   if (!Number.isFinite(weightKg) || !Number.isFinite(heightCm) || weightKg <= 0 || heightCm <= 0) return null;
   return Math.round((weightKg / ((heightCm / 100) ** 2)) * 10) / 10;

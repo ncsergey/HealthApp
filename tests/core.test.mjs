@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { isFuture, moscowDateTimeInputToIso, moscowInputToIso } from "../js/datetime.js";
 import { parseBackupFile } from "../js/import.js";
-import { calculateBmi, evaluateBmi, evaluateGlucose, evaluatePressure, evaluatePulse } from "../js/medical.js";
+import { ageOnDate, calculateBmi, evaluateBmi, evaluateGlucose, evaluatePressure, evaluatePulse, isBirthdayOnDate } from "../js/medical.js";
 import { formatMedicationDose, hasOngoingPainForBodyPart, normalizedNameKey, parseMedicationAmount } from "../js/pain.js";
 import { filterDataForPeriod, glucoseStats, headacheStats, overviewStats, pressureStats, pulseStats, weightStats } from "../js/statistics.js";
 import { buildDaySchedule, dayPartForTime, isCourseCompletedOn, medicationStatistics, normalizeSchedule, validateMedicationCourse } from "../js/medications.js";
@@ -23,6 +23,13 @@ test("будущее время определяется относительн�
   const now = new Date("2026-08-11T12:00:00.000Z");
   assert.equal(isFuture("2026-08-11T12:00:00.000Z", now), false);
   assert.equal(isFuture("2026-08-11T12:00:00.001Z", now), true);
+});
+
+test("возраст и день рождения определяются на выбранную дату", () => {
+  assert.equal(ageOnDate("1990-08-21", new Date("2026-08-21T12:00:00.000Z")), 36);
+  assert.equal(ageOnDate("1990-08-22", new Date("2026-08-21T12:00:00.000Z")), 35);
+  assert.equal(isBirthdayOnDate("1990-08-21", "2026-08-21"), true);
+  assert.equal(isBirthdayOnDate("1990-08-22", "2026-08-21"), false);
 });
 
 test("статистика давления рассчитывается из исходных записей", () => {

@@ -4,12 +4,13 @@ import { drawTimeChart } from "./charts.js";
 import { exportCsv, exportJson } from "./export.js";
 import { parseBackupFile } from "./import.js";
 import { filterDataForPeriod, glucoseStats, painStats, pressureStats, pulseStats, weightStats } from "./statistics.js";
-import { ageOnDate, calculateBmi, evaluateBmi, evaluateGlucose, evaluatePressure, evaluatePulse } from "./medical.js";
+import { ageOnDate, calculateBmi, evaluateBmi, evaluateGlucose, evaluatePressure, evaluatePulse, isBirthdayOnDate } from "./medical.js";
 import { createElement as el, debounce, finiteInteger, makeId } from "./utils.js";
 import { DEFAULT_BODY_PARTS, UNIT_BY_ID, directoryItemById, formatMedicationAmount, formatMedicationDose, hasOngoingPainForBodyPart, normalizedNameKey, parseMedicationAmount, validateDirectoryName } from "./pain.js";
 import { DAY_PARTS, FOOD_RELATIONS, buildDaySchedule, isCourseCompletedOn, validateMedicationCourse } from "./medications.js";
 
 const PAGE_SIZE = 60;
+const BIRTHDAY_EMOJIS = Object.freeze(["🎉", "🥳", "🎂", "🎊", "🎈", "🎁", "🍰"]);
 const BACKUP_PENDING_KEY = "myhealth:backup-pending:v2";
 const BACKUP_REMINDER_DISMISSED_KEY = "myhealth:backup-reminder-dismissed:v1";
 const GLUCOSE_CONTEXT = Object.freeze({ fasting: "Натощак", beforeMeal: "Перед едой", after1h: "Через 1 час после начала еды", after2h: "Через 2 часа после начала еды", random: "Случайное измерение" });
@@ -118,6 +119,14 @@ function setBusy(button, busy, busyLabel = "Сохранение…") {
 function recordTime(kind, record) { return kind === "pain" ? record.startedAt : record.measuredAt; }
 function newestWeight(items = state.data.weightMeasurements) { return [...items].sort((a, b) => new Date(b.measuredAt) - new Date(a.measuredAt))[0] || null; }
 function profileAge() { return state.data.profile ? ageOnDate(state.data.profile.birthDate, new Date(`${getMoscowFields().date}T12:00:00.000Z`)) : null; }
+function ageLabel(age) { if (!Number.isFinite(age)) return "—"; const mod100 = age % 100; const mod10 = age % 10; const word = mod100 >= 11 && mod100 <= 14 ? "лет" : mod10 === 1 ? "год" : mod10 >= 2 && mod10 <= 4 ? "года" : "лет"; return `${age} ${word}`; }
+function updateBirthdayBrand() {
+  const container = document.querySelector("#brand-icon-container"); const emoji = container.querySelector(".brand-emoji"); const icon = container.querySelector(".brand-icon");
+  const birthday = isBirthdayOnDate(state.data.profile?.birthDate, getMoscowFields().date);
+  container.classList.toggle("birthday", birthday);
+  if (birthday) { emoji.textContent = BIRTHDAY_EMOJIS[Math.floor(Math.random() * BIRTHDAY_EMOJIS.length)]; emoji.hidden = false; icon.hidden = true; }
+  else { emoji.textContent = ""; emoji.hidden = true; icon.hidden = false; }
+}
 function formatGlucose(value) { return Number(value).toFixed(1).replace(".", ","); }
 function formatOneDecimal(value) { return Number.isFinite(value) ? Number(value).toFixed(1).replace(".", ",") : "—"; }
 function formatSigned(value, unit = "") { if (!Number.isFinite(value)) return "—"; return `${value > 0 ? "+" : ""}${String(value).replace(".", ",")}${unit}`; }
@@ -494,7 +503,7 @@ async function saveProfileForm(event) {
   try {
     setBusy(button, true); const editedAt = new Date().toISOString(); const profile = { id: "profile", birthDate, sex, heightCm, editedAt };
     await saveProfile(profile);
-    closeDialog(document.querySelector("#profile-dialog")); await refreshData(); handleSuccessfulDataChange("Данные сохранены");
+    closeDialog(document.querySelector("#profile-dialog")); await refreshData(); updateBirthdayBrand(); handleSuccessfulDataChange("Данные сохранены");
   } catch (error) { showError(errorNode, error); } finally { setBusy(button, false); }
 }
 
@@ -505,7 +514,7 @@ function renderProfile() {
     card.append(el("button", { className: "primary-button profile-edit-button", type: "button", text: "Заполнить данные", onClick: openProfileForm })); elements.profileContent.append(card); return;
   }
   const current = newestWeight(); const bmi = current ? calculateBmi(current.weight, profile.heightCm) : null;
-  const items = [profileItem("Дата рождения", formatDateOnly(profile.birthDate)), profileItem("Пол", profile.sex === "male" ? "мужской" : "женский"), profileItem("Рост", `${profile.heightCm} см`)];
+  const items = [profileItem("Дата рождения", formatDateOnly(profile.birthDate)), profileItem("Возраст", ageLabel(profileAge())), profileItem("Пол", profile.sex === "male" ? "мужской" : "женский"), profileItem("Рост", `${profile.heightCm} см`)];
   if (current) items.push(profileItem("Текущий вес", `${current.weight} кг`), profileItem("ИМТ", formatOneDecimal(bmi)));
   const grid = el("dl", { className: "profile-grid" }, items);
   const editButton = el("button", { className: "profile-edit-fab", type: "button", onClick: openProfileForm, attrs: { "aria-label": "Редактировать данные" } }, [el("span", { text: "✏️", attrs: { "aria-hidden": "true" } })]);
@@ -910,17 +919,6 @@ function chooseHeadacheEntry() {
   closeDialog(document.querySelector("#entry-type-dialog")); openHeadacheForm();
 }
 
-function toggleBrandIcon(event) {
-  const button = event.currentTarget;
-  const emoji = button.querySelector(".brand-emoji");
-  const icon = button.querySelector(".brand-icon");
-  const showEmoji = emoji.hidden;
-  emoji.hidden = !showEmoji;
-  icon.hidden = showEmoji;
-  button.setAttribute("aria-pressed", String(showEmoji));
-  button.setAttribute("aria-label", showEmoji ? "Вернуть иконку приложения" : "Показать праздничный значок");
-}
-
 function bindEvents() {
   syncVisualViewport();
   for (const eventName of ["gesturestart", "gesturechange", "gestureend"]) document.addEventListener(eventName, (event) => event.preventDefault(), { passive: false });
@@ -936,7 +934,7 @@ function bindEvents() {
   document.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => closeDialog(button.closest("dialog")))); document.querySelectorAll("dialog").forEach((dialog) => dialog.addEventListener("close", () => queueMicrotask(syncModalState)));
   document.querySelectorAll("dialog.sheet").forEach((dialog) => dialog.addEventListener("click", (event) => { if (event.target === dialog) closeDialog(dialog); }));
   document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view)));
-  document.querySelector("#brand-icon-button").addEventListener("click", toggleBrandIcon);
+
   document.querySelectorAll("[data-medication-tab]").forEach((button) => button.addEventListener("click", () => { state.medicationTab = button.dataset.medicationTab; renderMedications(); }));
   elements.medicationCourseAdd.addEventListener("click", () => openMedicationCourseForm()); elements.medicationsContent.addEventListener("click", handleMedicationAction);
   document.querySelector("#medication-course-form").addEventListener("submit", saveMedicationCourse); document.querySelector("#course-add-time").addEventListener("click", () => addCourseScheduleTime()); document.querySelector("#course-add-medication").addEventListener("click", () => openDirectoryItemForm("medications", null, true));
@@ -967,7 +965,7 @@ function bindEvents() {
 
 async function initialize() {
   bindEvents(); updateOnlineStatus(); registerServiceWorker();
-  try { await openDatabase(); await refreshData(); requestPersistentStorage(); showBackupPrompt(); } catch (error) { elements.diaryList.replaceChildren(emptyState("Не удалось открыть локальные данные", `${error.message} Закройте другие вкладки и попробуйте снова.`, "⚠️")); document.querySelector("#add-button").disabled = true; }
+  try { await openDatabase(); await refreshData(); updateBirthdayBrand(); requestPersistentStorage(); showBackupPrompt(); } catch (error) { elements.diaryList.replaceChildren(emptyState("Не удалось открыть локальные данные", `${error.message} Закройте другие вкладки и попробуйте снова.`, "⚠️")); document.querySelector("#add-button").disabled = true; }
 }
 
 initialize();
