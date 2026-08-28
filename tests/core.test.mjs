@@ -569,20 +569,25 @@ test("ползунки доступны, имеют дробный drag и от�
   assert.match(html, /<label for="glass-blur-intensity">Размытие<\/label>/);
   assert.match(html, /<output id="glass-blur-value" for="glass-blur-intensity">/);
   assert.match(html, /id="glass-blur-intensity"[^>]+min="25"[^>]+max="100"[^>]+step="0\.01"/);
-  assert.equal((html.match(/class="glass-range-track"/g) || []).length, 2);
-  assert.equal((html.match(/class="glass-range-fill"/g) || []).length, 2);
+  assert.equal((html.match(/class="unified-range-control(?: pain-range-control)?"/g) || []).length, 5);
+  assert.equal((html.match(/class="unified-range-track"/g) || []).length, 5);
+  assert.equal((html.match(/class="unified-range-fill"/g) || []).length, 5);
   assert.match(html, /Размытие отключено выбранным режимом/);
   assert.match(app, /handleGlassTransparencyKeydown[\s\S]+Math\.round\(Number\(event\.currentTarget\.value\)\) \+ direction/);
   assert.match(app, /handleGlassBlurIntensityKeydown[\s\S]+Math\.round\(Number\(event\.currentTarget\.value\)\) \+ direction/);
-  assert.match(app, /syncGlassRangeProgress[\s\S]+closest\("\.glass-range-control"\)[\s\S]+--glass-range-progress/);
+  assert.match(app, /syncGlassRangeProgress[\s\S]+closest\("\.unified-range-control"\)[\s\S]+--range-progress/);
   assert.match(css, /--transparency-range: #286dcc/);
   assert.match(css, /--blur-range: #c93f55/);
-  assert.match(css, /\.blur-card \.glass-range-control \{ --glass-range-color: var\(--blur-range\); \}/);
-  assert.match(css, /\.glass-range-track \{[\s\S]+overflow: hidden[\s\S]+background: var\(--intensity-track\)/);
-  assert.match(css, /\.glass-range-fill \{[\s\S]+width: var\(--glass-range-progress\)[\s\S]+background: var\(--glass-range-color\)/);
-  assert.doesNotMatch(css, /linear-gradient\(to right, var\(--glass-range-color\)/);
-  assert.match(css, /\.glass-control-card input\[type="range"\] \{[\s\S]+border-radius: 999px/);
-  assert.match(css, /\.glass-control-card input\[type="range"\]::\-webkit-slider-thumb[\s\S]+width: 26px[\s\S]+border: 3px solid var\(--intensity-thumb-border\)/);
+  assert.match(css, /\.blur-card \.unified-range-control \{ --range-fill: var\(--blur-range\); \}/);
+  assert.match(css, /\.unified-range-track \{[\s\S]+overflow: hidden[\s\S]+background: var\(--intensity-track\)/);
+  assert.match(css, /\.unified-range-fill \{[\s\S]+width: var\(--range-progress\)[\s\S]+background: var\(--range-fill\)/);
+  assert.match(css, /\.unified-range-control input\[type="range"\] \{[\s\S]+border-radius: 999px/);
+  assert.match(css, /\.unified-range-control input\[type="range"\]::\-webkit-slider-runnable-track[\s\S]+-webkit-appearance: none[\s\S]+box-shadow: none/);
+  assert.match(css, /\.unified-range-control input\[type="range"\]::\-webkit-slider-thumb[\s\S]+width: 26px[\s\S]+border: 3px solid var\(--intensity-thumb-border\)/);
+  const modernFieldStyle = css.indexOf('html[data-interface="modern"] .field input,');
+  const sharedSurfaceReset = css.indexOf('html .unified-range-control > input[type="range"]');
+  assert.ok(modernFieldStyle >= 0 && sharedSurfaceReset > modernFieldStyle);
+  assert.match(css, /html \.unified-range-control > input\[type="range"\] \{[\s\S]+border: 0[\s\S]+background: transparent[\s\S]+box-shadow: none[\s\S]+-webkit-backdrop-filter: none/);
 });
 
 test("CSS масштабирует full, ограничивает reduced и полностью отключает blur в none", () => {
@@ -602,20 +607,16 @@ test("CSS масштабирует full, ограничивает reduced и п�
   assert.doesNotMatch(css, /will-change/);
 });
 
-test("все ползунки боли используют однотонную жёлтую дорожку", () => {
+test("ползунки боли используют общий компонент и насыщенный градиент", () => {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
   const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
-  assert.equal((html.match(/class="intensity-range-track"/g) || []).length, 3);
-  assert.equal((html.match(/class="intensity-range-fill"/g) || []).length, 3);
-  assert.match(app, /updateIntensityDisplay[\s\S]+closest\("\.intensity-range-control"\)[\s\S]+--intensity-progress/);
-  assert.match(css, /--pain-range: #c18a00/);
-  assert.match(css, /--pain-range: #f0c44f/);
-  assert.match(css, /\.intensity-range-track \{[\s\S]+overflow: hidden[\s\S]+border: 1px solid[\s\S]+background: var\(--intensity-track\)/);
-  assert.match(css, /\.intensity-range-fill \{[\s\S]+width: var\(--intensity-progress\)[\s\S]+height: 100%[\s\S]+background: var\(--pain-range\)/);
-  assert.doesNotMatch(css, /\.intensity-range-fill \{[^}]*linear-gradient/);
-  assert.doesNotMatch(css, /\.intensity-range-track::(?:before|after)/);
-  assert.match(css, /::-webkit-slider-runnable-track \{[\s\S]+-webkit-appearance: none[\s\S]+background: transparent[\s\S]+box-shadow: none/);
+  assert.equal((html.match(/class="unified-range-control pain-range-control"/g) || []).length, 3);
+  assert.match(app, /updateIntensityDisplay[\s\S]+closest\("\.unified-range-control"\)[\s\S]+--range-progress/);
+  assert.match(css, /--intensity-low: #16875f/);
+  assert.match(css, /--intensity-high: #d33f49/);
+  assert.match(css, /\.pain-range-control \{ --range-fill: linear-gradient\(to right, var\(--intensity-low\), var\(--intensity-medium\) 50%, var\(--intensity-high\)\); \}/);
+  for (const source of [html, app, css]) assert.doesNotMatch(source, /(?:glass|intensity)-range-(?:control|track|fill)/);
 });
 
 test("backup v10 экспортирует обе настройки независимо от интерфейса без сведений об устройстве", () => {
