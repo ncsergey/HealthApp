@@ -602,20 +602,20 @@ test("CSS масштабирует full, ограничивает reduced и п�
   assert.doesNotMatch(css, /will-change/);
 });
 
-test("ползунки боли используют отдельную дорожку без цветного слоя на правом краю", () => {
+test("все ползунки боли используют однотонную жёлтую дорожку", () => {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
   const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
   assert.equal((html.match(/class="intensity-range-track"/g) || []).length, 3);
   assert.equal((html.match(/class="intensity-range-fill"/g) || []).length, 3);
   assert.match(app, /updateIntensityDisplay[\s\S]+closest\("\.intensity-range-control"\)[\s\S]+--intensity-progress/);
-  assert.match(css, /\.intensity-range-track \{[\s\S]+overflow: hidden[\s\S]+background: var\(--intensity-track\)/);
-  assert.match(css, /\.intensity-range-track::before \{[\s\S]+z-index: 2[\s\S]+right: 0[\s\S]+left: var\(--intensity-progress\)[\s\S]+background: var\(--intensity-track\)/);
-  assert.match(css, /\.intensity-range-track::after \{[\s\S]+z-index: 3[\s\S]+border: 1px solid/);
-  assert.match(css, /\.intensity-range-fill \{[\s\S]+z-index: 1/);
-  assert.doesNotMatch(css, /clip-path:[^;]*--intensity-progress/);
+  assert.match(css, /--pain-range: #c18a00/);
+  assert.match(css, /--pain-range: #f0c44f/);
+  assert.match(css, /\.intensity-range-track \{[\s\S]+overflow: hidden[\s\S]+border: 1px solid[\s\S]+background: var\(--intensity-track\)/);
+  assert.match(css, /\.intensity-range-fill \{[\s\S]+width: var\(--intensity-progress\)[\s\S]+height: 100%[\s\S]+background: var\(--pain-range\)/);
+  assert.doesNotMatch(css, /\.intensity-range-fill \{[^}]*linear-gradient/);
+  assert.doesNotMatch(css, /\.intensity-range-track::(?:before|after)/);
   assert.match(css, /::-webkit-slider-runnable-track \{[\s\S]+-webkit-appearance: none[\s\S]+background: transparent[\s\S]+box-shadow: none/);
-  assert.doesNotMatch(css, /linear-gradient\(to right, transparent 0, transparent var\(--intensity-progress\)/);
 });
 
 test("backup v10 экспортирует обе настройки независимо от интерфейса без сведений об устройстве", () => {
