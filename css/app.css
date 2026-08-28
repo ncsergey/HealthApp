@@ -148,8 +148,35 @@ h3 { margin-bottom: 8px; font-size: 18px; }
 .field-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 fieldset { min-width: 0; margin: 0 0 10px; padding: 0; border: 0; }
 legend { margin-bottom: 10px; color: var(--muted); font-size: 12px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
-.range-field input[type="range"] {
+.intensity-range-control {
   --intensity-progress: 44.444%;
+  position: relative;
+  width: 100%;
+  height: 48px;
+}
+.intensity-range-track {
+  position: absolute;
+  z-index: 0;
+  top: 50%;
+  right: 13px;
+  left: 13px;
+  height: 10px;
+  overflow: hidden;
+  transform: translateY(-50%);
+  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+  border-radius: 999px;
+  background: var(--intensity-track);
+  pointer-events: none;
+}
+.intensity-range-fill {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to right, var(--intensity-low), var(--intensity-medium) 50%, var(--intensity-high));
+  clip-path: inset(0 calc(100% - var(--intensity-progress)) 0 0);
+}
+.range-field input[type="range"] {
+  position: relative;
+  z-index: 1;
   appearance: none;
   -webkit-appearance: none;
   min-height: 48px;
@@ -162,11 +189,8 @@ legend { margin-bottom: 10px; color: var(--muted); font-size: 12px; font-weight:
 }
 .range-field input[type="range"]::-webkit-slider-runnable-track {
   height: 10px;
-  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
-  border-radius: 999px;
-  background:
-    linear-gradient(to right, transparent 0, transparent var(--intensity-progress), var(--intensity-track) var(--intensity-progress), var(--intensity-track) 100%),
-    linear-gradient(to right, var(--intensity-low), var(--intensity-medium) 50%, var(--intensity-high));
+  border: 0;
+  background: transparent;
 }
 .range-field input[type="range"]::-webkit-slider-thumb {
   appearance: none;
@@ -180,12 +204,9 @@ legend { margin-bottom: 10px; color: var(--muted); font-size: 12px; font-weight:
   box-shadow: 0 2px 8px rgba(8, 24, 20, .22);
 }
 .range-field input[type="range"]::-moz-range-track {
-  height: 8px;
-  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
-  border-radius: 999px;
-  background:
-    linear-gradient(to right, transparent 0, transparent var(--intensity-progress), var(--intensity-track) var(--intensity-progress), var(--intensity-track) 100%),
-    linear-gradient(to right, var(--intensity-low), var(--intensity-medium) 50%, var(--intensity-high));
+  height: 10px;
+  border: 0;
+  background: transparent;
 }
 .range-field input[type="range"]::-moz-range-progress { background: transparent; }
 .range-field input[type="range"]::-moz-range-thumb {
@@ -628,27 +649,54 @@ html[data-theme="dark"] .toast { background: #eef5f2; color: #172320; }
 .glass-control-heading label { font-weight: 800; }
 .glass-control-heading small { color: var(--muted); line-height: 1.35; }
 .glass-control-heading output { flex: 0 0 auto; min-width: 52px; padding: 5px 8px; border-radius: 10px; background: var(--primary-soft); color: var(--primary-strong); text-align: center; font-weight: 800; }
-.glass-control-card input[type="range"] {
+.glass-range-control {
   --glass-range-color: var(--transparency-range);
   --glass-range-progress: 0%;
+  position: relative;
+  width: 100%;
+  height: 48px;
+}
+.blur-card .glass-range-control { --glass-range-color: var(--blur-range); }
+.glass-range-track {
+  position: absolute;
+  z-index: 0;
+  top: 50%;
+  right: 13px;
+  left: 13px;
+  height: 10px;
+  overflow: hidden;
+  transform: translateY(-50%);
+  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+  border-radius: 999px;
+  background: var(--intensity-track);
+  pointer-events: none;
+}
+.glass-range-fill {
+  display: block;
+  width: var(--glass-range-progress);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--glass-range-color);
+}
+.glass-control-card input[type="range"] {
+  position: relative;
+  z-index: 1;
   width: 100%;
   min-height: 48px;
   margin: 0;
   padding: 0 13px;
   border: 0;
-  border-radius: 0;
+  border-radius: 999px;
   background: transparent;
   cursor: pointer;
   touch-action: pan-x;
   appearance: none;
   -webkit-appearance: none;
 }
-#glass-blur-intensity { --glass-range-color: var(--blur-range); }
 .glass-control-card input[type="range"]::-webkit-slider-runnable-track {
   height: 10px;
-  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
-  border-radius: 999px;
-  background: linear-gradient(to right, var(--glass-range-color) 0 var(--glass-range-progress), var(--intensity-track) var(--glass-range-progress) 100%);
+  border: 0;
+  background: transparent;
 }
 .glass-control-card input[type="range"]::-webkit-slider-thumb {
   width: 26px;
@@ -662,15 +710,12 @@ html[data-theme="dark"] .toast { background: #eef5f2; color: #172320; }
   -webkit-appearance: none;
 }
 .glass-control-card input[type="range"]::-moz-range-track {
-  height: 8px;
-  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
-  border-radius: 999px;
-  background: var(--intensity-track);
+  height: 10px;
+  border: 0;
+  background: transparent;
 }
 .glass-control-card input[type="range"]::-moz-range-progress {
-  height: 8px;
-  border-radius: 999px;
-  background: var(--glass-range-color);
+  background: transparent;
 }
 .glass-control-card input[type="range"]::-moz-range-thumb {
   width: 20px;

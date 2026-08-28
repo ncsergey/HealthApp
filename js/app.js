@@ -64,7 +64,7 @@ function syncGlassRangeProgress(input) {
   const maximum = Number(input.max);
   const value = Number(input.value);
   const progress = maximum > minimum ? ((value - minimum) / (maximum - minimum)) * 100 : 0;
-  input.style.setProperty("--glass-range-progress", `${Math.min(100, Math.max(0, progress))}%`);
+  input.closest(".glass-range-control")?.style.setProperty("--glass-range-progress", `${Math.min(100, Math.max(0, progress))}%`);
 }
 
 function renderInterfaceSettings() {
@@ -466,7 +466,7 @@ function readHeadachePeriod() {
 function roundedIntensity(value) { const number = Number(value); return Number.isFinite(number) && number >= 1 && number <= 10 ? Math.round(number) : null; }
 function updateIntensityDisplay(input) {
   const intensity = roundedIntensity(input.value); if (intensity === null) return;
-  input.style.setProperty("--intensity-progress", `${((Number(input.value) - 1) / 9) * 100}%`); document.querySelector(`#${input.id}-output`).value = intensity; input.setAttribute("aria-valuetext", `${intensity} из 10`);
+  input.closest(".intensity-range-control")?.style.setProperty("--intensity-progress", `${((Number(input.value) - 1) / 9) * 100}%`); document.querySelector(`#${input.id}-output`).value = intensity; input.setAttribute("aria-valuetext", `${intensity} из 10`);
   const minimum = document.querySelector("#intensity-min"); const maximum = document.querySelector("#intensity-max");
   if (input === minimum && Number(minimum.value) > Number(maximum.value)) { maximum.value = minimum.value; updateIntensityDisplay(maximum); }
   if (input === maximum && Number(maximum.value) < Number(minimum.value)) { minimum.value = maximum.value; updateIntensityDisplay(minimum); }
