@@ -684,6 +684,9 @@ html[data-interface="modern"] {
   --radius: 22px;
   --shadow: 0 18px 45px rgba(22, 68, 73, .16);
   --glass-blur-scale: 1;
+  --floating-chrome-gap: 12px;
+  --floating-chrome-height: 71px;
+  --floating-chrome-width: min(calc(100% - 24px - var(--safe-left) - var(--safe-right)), 680px);
   background: #dfeff0;
 }
 html[data-interface="modern"] body {
@@ -695,13 +698,24 @@ html[data-interface="modern"] body {
   background-attachment: fixed;
 }
 html[data-interface="modern"] .app-header {
-  margin: 0 max(0px, var(--safe-right)) 0 max(0px, var(--safe-left));
-  border-color: rgba(255,255,255,.55);
-  background: color-mix(in srgb, var(--surface) var(--glass-subtle-opacity), transparent);
-  box-shadow: 0 8px 28px rgba(28, 73, 78, .08), inset 0 -1px rgba(255,255,255,.65);
-  backdrop-filter: saturate(145%) blur(calc(24px * var(--glass-blur-scale)));
-  -webkit-backdrop-filter: saturate(145%) blur(calc(24px * var(--glass-blur-scale)));
+  position: fixed;
+  top: calc(var(--floating-chrome-gap) + var(--safe-top));
+  right: auto;
+  left: 50%;
+  width: var(--floating-chrome-width);
+  height: var(--floating-chrome-height);
+  margin: 0;
+  padding: 7px 12px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(255,255,255,.68);
+  border-radius: 25px;
+  background: color-mix(in srgb, var(--surface) var(--glass-opacity), transparent);
+  box-shadow: 0 18px 46px rgba(20,62,68,.2), inset 0 1px rgba(255,255,255,.86);
+  backdrop-filter: blur(calc(28px * var(--glass-blur-scale))) saturate(155%);
+  -webkit-backdrop-filter: blur(calc(28px * var(--glass-blur-scale))) saturate(155%);
+  overflow: hidden;
 }
+html[data-interface="modern"] .app-header::before { content: ""; position: absolute; inset: 0 12% auto; height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.9), transparent); pointer-events: none; }
 html[data-interface="modern"] .brand-icon-container { border-radius: 15px; box-shadow: 0 8px 22px rgba(8, 127, 117, .3); }
 html[data-interface="modern"] .brand-icon, html[data-interface="modern"] .brand-emoji { border-radius: 15px; }
 html[data-interface="modern"] .icon-button,
@@ -712,12 +726,17 @@ html[data-interface="modern"] .back-button {
   backdrop-filter: blur(calc(20px * var(--glass-blur-scale))) saturate(140%);
   -webkit-backdrop-filter: blur(calc(20px * var(--glass-blur-scale))) saturate(140%);
 }
-html[data-interface="modern"] .app-main { padding-bottom: calc(132px + var(--safe-bottom)); }
+html[data-interface="modern"] .app-main {
+  padding-top: calc(var(--floating-chrome-gap) + var(--safe-top) + var(--floating-chrome-height) + 18px);
+  padding-bottom: calc(var(--floating-chrome-gap) + var(--safe-bottom) + var(--floating-chrome-height) + 49px);
+}
+html[data-interface="modern"] .day-label { top: calc(var(--floating-chrome-gap) + var(--safe-top) + var(--floating-chrome-height) + 12px); }
 html[data-interface="modern"] .bottom-nav {
   right: auto;
-  bottom: calc(12px + var(--safe-bottom));
+  bottom: calc(var(--floating-chrome-gap) + var(--safe-bottom));
   left: 50%;
-  width: min(calc(100% - 24px - var(--safe-left) - var(--safe-right)), 680px);
+  width: var(--floating-chrome-width);
+  height: var(--floating-chrome-height);
   padding: 7px;
   transform: translateX(-50%);
   border: 1px solid rgba(255,255,255,.68);
@@ -1073,27 +1092,31 @@ html .unified-range-control > input[type="range"] {
   }
 }
 
-/* On short landscape screens the modern navigation becomes a side rail, so it never covers content. */
+/* Modern landscape keeps the same symmetric floating chrome as portrait. */
 @media (orientation: landscape) and (max-height: 500px) {
+  html[data-interface="modern"] body { padding-left: 0; }
   html[data-interface="modern"] .app-main {
     width: min(100%, 820px);
-    padding-right: max(104px, calc(92px + var(--safe-right)));
-    padding-bottom: 28px;
+    padding-right: max(18px, var(--safe-right));
+    padding-bottom: calc(var(--floating-chrome-gap) + var(--safe-bottom) + var(--floating-chrome-height) + 28px);
     padding-left: max(18px, var(--safe-left));
   }
   html[data-interface="modern"] .bottom-nav {
-    top: calc(76px + var(--safe-top));
-    right: calc(8px + var(--safe-right));
-    bottom: calc(8px + var(--safe-bottom));
-    left: auto;
-    width: 78px;
-    grid-template: repeat(4, minmax(0, 1fr)) / 1fr;
-    padding: 5px;
-    transform: none;
-    border-radius: 23px;
+    top: auto;
+    right: auto;
+    bottom: calc(var(--floating-chrome-gap) + var(--safe-bottom));
+    left: 50%;
+    width: var(--floating-chrome-width);
+    height: var(--floating-chrome-height);
+    grid-template: 1fr / repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    padding: 7px;
+    transform: translateX(-50%);
+    border-radius: 25px;
   }
-  html[data-interface="modern"] .bottom-nav button { width: 100%; height: auto; min-height: 52px; padding: 3px 1px; border-radius: 17px; }
-  html[data-interface="modern"] .bottom-nav::before { inset: 0 12px auto; }
+  html[data-interface="modern"] .bottom-nav button { width: 100%; height: 55px; min-height: 55px; padding: 4px 2px; border-radius: 18px; }
+  html[data-interface="modern"] .bottom-nav::before { inset: 0 12% auto; }
   html[data-interface="modern"] .add-button,
-  html[data-interface="modern"] .profile-edit-fab { right: max(100px, calc((100vw - 820px) / 2 + 100px), calc(92px + var(--safe-right))); bottom: calc(18px + var(--safe-bottom)); }
+  html[data-interface="modern"] .profile-edit-fab { right: max(18px, calc((100vw - 820px) / 2 + 18px), var(--safe-right)); bottom: calc(96px + var(--safe-bottom)); }
+  html[data-interface="modern"] .toast { bottom: calc(var(--floating-chrome-gap) + var(--safe-bottom) + var(--floating-chrome-height) + 12px); }
 }

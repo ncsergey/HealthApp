@@ -593,7 +593,7 @@ test("ползунки доступны, имеют дробный drag и от�
 test("CSS масштабирует full, ограничивает reduced и полностью отключает blur в none", () => {
   const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
   for (const line of css.split(/\r?\n/).filter((line) => line.includes("data-glass-effects"))) assert.match(line, /data-interface="modern"/);
-  assert.match(css, /\.app-header[\s\S]+blur\(calc\(24px \* var\(--glass-blur-scale\)\)\)/);
+  assert.match(css, /\.app-header[\s\S]+blur\(calc\(28px \* var\(--glass-blur-scale\)\)\)/);
   assert.match(css, /\.bottom-nav[\s\S]+blur\(calc\(28px \* var\(--glass-blur-scale\)\)\)/);
   assert.match(css, /\.entry-card[\s\S]+blur\(calc\(22px \* var\(--glass-blur-scale\)\)\)/);
   assert.match(css, /data-glass-effects="reduced"[^}]+backdrop-filter: none !important/s);
@@ -605,6 +605,18 @@ test("CSS масштабирует full, ограничивает reduced и п�
   assert.match(css, /data-glass-effects="none"[^}]+-webkit-backdrop-filter: none !important/s);
   assert.doesNotMatch(css, /transition:[^;]*(?:backdrop-filter|filter)/);
   assert.doesNotMatch(css, /will-change/);
+});
+
+test("в современном интерфейсе шапка и нижнее меню образуют симметричные плавающие панели", () => {
+  const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
+  assert.match(css, /--floating-chrome-gap: 12px/);
+  assert.match(css, /--floating-chrome-height: 71px/);
+  assert.match(css, /--floating-chrome-width: min\(calc\(100% - 24px - var\(--safe-left\) - var\(--safe-right\)\), 680px\)/);
+  assert.match(css, /html\[data-interface="modern"\] \.app-header \{[\s\S]+position: fixed[\s\S]+top: calc\(var\(--floating-chrome-gap\) \+ var\(--safe-top\)\)[\s\S]+left: 50%[\s\S]+width: var\(--floating-chrome-width\)[\s\S]+height: var\(--floating-chrome-height\)[\s\S]+transform: translateX\(-50%\)/);
+  assert.match(css, /html\[data-interface="modern"\] \.bottom-nav \{[\s\S]+bottom: calc\(var\(--floating-chrome-gap\) \+ var\(--safe-bottom\)\)[\s\S]+left: 50%[\s\S]+width: var\(--floating-chrome-width\)[\s\S]+height: var\(--floating-chrome-height\)/);
+  assert.match(css, /html\[data-interface="modern"\] \.app-main \{[\s\S]+padding-top: calc\(var\(--floating-chrome-gap\) \+ var\(--safe-top\) \+ var\(--floating-chrome-height\) \+ 18px\)/);
+  assert.match(css, /@media \(orientation: landscape\) and \(max-height: 500px\) \{[\s\S]+html\[data-interface="modern"\] body \{ padding-left: 0; \}[\s\S]+html\[data-interface="modern"\] \.bottom-nav \{[\s\S]+top: auto[\s\S]+bottom: calc\(var\(--floating-chrome-gap\) \+ var\(--safe-bottom\)\)[\s\S]+width: var\(--floating-chrome-width\)[\s\S]+height: var\(--floating-chrome-height\)[\s\S]+grid-template: 1fr \/ repeat\(4, minmax\(0, 1fr\)\)[\s\S]+transform: translateX\(-50%\)/);
+  assert.doesNotMatch(css, /html\[data-interface="modern"\] \.bottom-nav \{[\s\S]{0,300}width: 78px/);
 });
 
 test("ползунки боли используют общий компонент и насыщенный градиент", () => {
