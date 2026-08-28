@@ -163,13 +163,22 @@ legend { margin-bottom: 10px; color: var(--muted); font-size: 12px; font-weight:
   height: 10px;
   overflow: hidden;
   transform: translateY(-50%);
-  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+  border: 0;
   border-radius: 999px;
   background: var(--intensity-track);
   pointer-events: none;
 }
+.intensity-range-track::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+  border-radius: inherit;
+}
 .intensity-range-fill {
   position: absolute;
+  z-index: 1;
   inset: 0;
   background: linear-gradient(to right, var(--intensity-low), var(--intensity-medium) 50%, var(--intensity-high));
   clip-path: inset(0 calc(100% - var(--intensity-progress)) 0 0);
