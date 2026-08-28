@@ -612,11 +612,21 @@ test("в современном интерфейсе шапка и нижнее 
   assert.match(css, /--floating-chrome-gap: 12px/);
   assert.match(css, /--floating-chrome-height: 71px/);
   assert.match(css, /--floating-chrome-width: min\(calc\(100% - 24px - var\(--safe-left\) - var\(--safe-right\)\), 680px\)/);
-  assert.match(css, /html\[data-interface="modern"\] \.app-header \{[\s\S]+position: fixed[\s\S]+top: calc\(var\(--floating-chrome-gap\) \+ var\(--safe-top\)\)[\s\S]+left: 50%[\s\S]+width: var\(--floating-chrome-width\)[\s\S]+height: var\(--floating-chrome-height\)[\s\S]+transform: translateX\(-50%\)/);
+  assert.match(css, /--header-safe-top: var\(--safe-top\)/);
+  assert.match(css, /html\[data-interface="modern"\] \.app-header \{[\s\S]+position: fixed[\s\S]+top: calc\(var\(--floating-chrome-gap\) \+ var\(--header-safe-top\)\)[\s\S]+left: 50%[\s\S]+width: var\(--floating-chrome-width\)[\s\S]+height: var\(--floating-chrome-height\)[\s\S]+transform: translateX\(-50%\)/);
   assert.match(css, /html\[data-interface="modern"\] \.bottom-nav \{[\s\S]+bottom: calc\(var\(--floating-chrome-gap\) \+ var\(--safe-bottom\)\)[\s\S]+left: 50%[\s\S]+width: var\(--floating-chrome-width\)[\s\S]+height: var\(--floating-chrome-height\)/);
-  assert.match(css, /html\[data-interface="modern"\] \.app-main \{[\s\S]+padding-top: calc\(var\(--floating-chrome-gap\) \+ var\(--safe-top\) \+ var\(--floating-chrome-height\) \+ 18px\)/);
+  assert.match(css, /html\[data-interface="modern"\] \.app-main \{[\s\S]+padding-top: calc\(var\(--floating-chrome-gap\) \+ var\(--header-safe-top\) \+ var\(--floating-chrome-height\) \+ 18px\)/);
   assert.match(css, /@media \(orientation: landscape\) and \(max-height: 500px\) \{[\s\S]+html\[data-interface="modern"\] body \{ padding-left: 0; \}[\s\S]+html\[data-interface="modern"\] \.bottom-nav \{[\s\S]+top: auto[\s\S]+bottom: calc\(var\(--floating-chrome-gap\) \+ var\(--safe-bottom\)\)[\s\S]+width: var\(--floating-chrome-width\)[\s\S]+height: var\(--floating-chrome-height\)[\s\S]+grid-template: 1fr \/ repeat\(4, minmax\(0, 1fr\)\)[\s\S]+transform: translateX\(-50%\)/);
   assert.doesNotMatch(css, /html\[data-interface="modern"\] \.bottom-nav \{[\s\S]{0,300}width: 78px/);
+});
+
+test("верхняя safe-area повторно синхронизируется после поворота iOS", () => {
+  const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
+  assert.match(app, /function measureSafeAreaTop\(\)[\s\S]+env\(safe-area-inset-top,0px\)[\s\S]+getComputedStyle\(probe\)\.top/);
+  assert.match(app, /function syncHeaderSafeTop\(\)[\s\S]+visualViewport\?\.offsetTop[\s\S]+Math\.max\(measureSafeAreaTop\(\), viewportOffsetTop\)[\s\S]+--header-safe-top/);
+  assert.match(app, /headerSafeTopSyncTimers = \[0, 60, 180, 360, 720\]\.map/);
+  assert.match(app, /addEventListener\("orientationchange", scheduleHeaderSafeTopSync\)/);
+  assert.match(app, /addEventListener\("resize", debounce\(handleViewportOrientationChange, 80\)\)/);
 });
 
 test("в современном интерфейсе дневниковые фильтры занимают всю ширину в альбомной ориентации", () => {
