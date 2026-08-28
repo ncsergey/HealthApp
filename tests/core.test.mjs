@@ -624,6 +624,11 @@ test("в современном интерфейсе дневниковые фи
   assert.match(css, /@media \(orientation: landscape\) and \(max-height: 500px\) \{[\s\S]+html\[data-interface="modern"\] \.filter-scroll \{[\s\S]+overflow-x: visible[\s\S]+html\[data-interface="modern"\] \.filter-scroll::after \{[\s\S]+display: none[\s\S]+html\[data-interface="modern"\] \.diary-filters \{[\s\S]+width: 100%[\s\S]+min-width: 0[\s\S]+grid-template-columns: repeat\(6, minmax\(0, 1fr\)\)/);
 });
 
+test("эмодзи справочников используют обводку современных карточек", () => {
+  const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
+  assert.match(css, /html\[data-interface="modern"\] \.settings-icon,\s*html\[data-interface="modern"\] \.overview-icon,\s*html\[data-interface="modern"\] \.directory-choice-icon \{[^}]+border: 1px solid rgba\(255,255,255,\.62\)[^}]+box-shadow: inset 0 1px rgba\(255,255,255,\.7\)/);
+});
+
 test("ползунки боли используют общий компонент и насыщенный градиент", () => {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
