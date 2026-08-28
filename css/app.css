@@ -1101,6 +1101,22 @@ html .unified-range-control > input[type="range"] {
     padding-bottom: calc(var(--floating-chrome-gap) + var(--safe-bottom) + var(--floating-chrome-height) + 28px);
     padding-left: max(18px, var(--safe-left));
   }
+  html[data-interface="modern"] .filter-scroll {
+    overflow-x: visible;
+  }
+  html[data-interface="modern"] .filter-scroll::after {
+    display: none;
+  }
+  html[data-interface="modern"] .diary-filters {
+    width: 100%;
+    min-width: 0;
+    grid-auto-flow: initial;
+    grid-auto-columns: auto;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  html[data-interface="modern"] .diary-filters button {
+    min-width: 0;
+  }
   html[data-interface="modern"] .bottom-nav {
     top: auto;
     right: auto;

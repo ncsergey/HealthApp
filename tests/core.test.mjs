@@ -619,6 +619,11 @@ test("в современном интерфейсе шапка и нижнее 
   assert.doesNotMatch(css, /html\[data-interface="modern"\] \.bottom-nav \{[\s\S]{0,300}width: 78px/);
 });
 
+test("в современном интерфейсе дневниковые фильтры занимают всю ширину в альбомной ориентации", () => {
+  const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
+  assert.match(css, /@media \(orientation: landscape\) and \(max-height: 500px\) \{[\s\S]+html\[data-interface="modern"\] \.filter-scroll \{[\s\S]+overflow-x: visible[\s\S]+html\[data-interface="modern"\] \.filter-scroll::after \{[\s\S]+display: none[\s\S]+html\[data-interface="modern"\] \.diary-filters \{[\s\S]+width: 100%[\s\S]+min-width: 0[\s\S]+grid-template-columns: repeat\(6, minmax\(0, 1fr\)\)/);
+});
+
 test("ползунки боли используют общий компонент и насыщенный градиент", () => {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
