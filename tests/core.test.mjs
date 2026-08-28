@@ -629,6 +629,11 @@ test("эмодзи справочников используют обводку 
   assert.match(css, /html\[data-interface="modern"\] \.settings-icon,\s*html\[data-interface="modern"\] \.overview-icon,\s*html\[data-interface="modern"\] \.directory-choice-icon \{[^}]+border: 1px solid rgba\(255,255,255,\.62\)[^}]+box-shadow: inset 0 1px rgba\(255,255,255,\.7\)/);
 });
 
+test("PWA разрешает портретную и альбомную ориентации", () => {
+  const manifest = JSON.parse(readFileSync(new URL("../manifest.json", import.meta.url), "utf8"));
+  assert.equal(manifest.orientation, "any");
+});
+
 test("ползунки боли используют общий компонент и насыщенный градиент", () => {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");

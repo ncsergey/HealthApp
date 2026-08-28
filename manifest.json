@@ -7,7 +7,7 @@
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait-primary",
+  "orientation": "any",
   "background_color": "#f5f8f7",
   "theme_color": "#f5f8f7",
   "categories": ["health", "medical", "lifestyle"],
