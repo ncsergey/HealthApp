@@ -37,6 +37,8 @@
   --intensity-track: #d9e3df;
   --intensity-thumb: #ffffff;
   --intensity-thumb-border: #43534e;
+  --transparency-range: #286dcc;
+  --blur-range: #c93f55;
   --shadow: 0 10px 30px rgba(28, 50, 44, .09);
   --radius: 18px;
   --safe-top: env(safe-area-inset-top, 0px);
@@ -153,7 +155,7 @@ legend { margin-bottom: 10px; color: var(--muted); font-size: 12px; font-weight:
   min-height: 48px;
   padding: 0 13px;
   border: 0;
-  border-radius: 0;
+  border-radius: 999px;
   background: transparent;
   cursor: pointer;
   touch-action: pan-x;
@@ -388,6 +390,7 @@ noscript { display: block; padding: 20px; color: var(--danger); }
     --pressure: #81b9f3; --pressure-soft: #1c334a; --pulse: #ef9db1; --pulse-soft: #482630; --headache: #e0aa70; --headache-soft: #49331f; --danger: #ef7d7d; --warning: #f2c86f;
     --intensity-low: #4ad49e; --intensity-medium: #f0c44f; --intensity-high: #ff6b76; --intensity-track: #344640;
     --intensity-thumb: #eef5f2; --intensity-thumb-border: #101817;
+    --transparency-range: #6ca8ff; --blur-range: #ff7182;
     --shadow: 0 10px 30px rgba(0, 0, 0, .25);
   }
   :root:not([data-theme]) .status-banner.warning, :root:not([data-theme]) .form-warning,
@@ -403,6 +406,7 @@ noscript { display: block; padding: 20px; color: var(--danger); }
   --pressure: #81b9f3; --pressure-soft: #1c334a; --pulse: #ef9db1; --pulse-soft: #482630; --headache: #e0aa70; --headache-soft: #49331f; --danger: #ef7d7d; --warning: #f2c86f;
   --intensity-low: #4ad49e; --intensity-medium: #f0c44f; --intensity-high: #ff6b76; --intensity-track: #344640;
   --intensity-thumb: #eef5f2; --intensity-thumb-border: #101817;
+  --transparency-range: #6ca8ff; --blur-range: #ff7182;
   --shadow: 0 10px 30px rgba(0, 0, 0, .25);
 }
 html[data-theme="dark"] .status-banner.warning, html[data-theme="dark"] .form-warning { background: #3e341d; border-color: #67582d; }
@@ -624,7 +628,58 @@ html[data-theme="dark"] .toast { background: #eef5f2; color: #172320; }
 .glass-control-heading label { font-weight: 800; }
 .glass-control-heading small { color: var(--muted); line-height: 1.35; }
 .glass-control-heading output { flex: 0 0 auto; min-width: 52px; padding: 5px 8px; border-radius: 10px; background: var(--primary-soft); color: var(--primary-strong); text-align: center; font-weight: 800; }
-.glass-control-card input[type="range"] { width: 100%; min-height: 44px; margin: 0; accent-color: var(--primary); cursor: pointer; touch-action: pan-y; }
+.glass-control-card input[type="range"] {
+  --glass-range-color: var(--transparency-range);
+  --glass-range-progress: 0%;
+  width: 100%;
+  min-height: 48px;
+  margin: 0;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: pan-x;
+  appearance: none;
+  -webkit-appearance: none;
+}
+#glass-blur-intensity { --glass-range-color: var(--blur-range); }
+.glass-control-card input[type="range"]::-webkit-slider-runnable-track {
+  height: 10px;
+  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--glass-range-color) 0 var(--glass-range-progress), var(--intensity-track) var(--glass-range-progress) 100%);
+}
+.glass-control-card input[type="range"]::-webkit-slider-thumb {
+  width: 26px;
+  height: 26px;
+  margin-top: -9px;
+  border: 3px solid var(--intensity-thumb-border);
+  border-radius: 50%;
+  background: var(--intensity-thumb);
+  box-shadow: 0 2px 8px rgba(8, 24, 20, .22);
+  appearance: none;
+  -webkit-appearance: none;
+}
+.glass-control-card input[type="range"]::-moz-range-track {
+  height: 8px;
+  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+  border-radius: 999px;
+  background: var(--intensity-track);
+}
+.glass-control-card input[type="range"]::-moz-range-progress {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--glass-range-color);
+}
+.glass-control-card input[type="range"]::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 3px solid var(--intensity-thumb-border);
+  border-radius: 50%;
+  background: var(--intensity-thumb);
+  box-shadow: 0 2px 8px rgba(8, 24, 20, .22);
+}
 .glass-control-card input[type="range"]:disabled { cursor: not-allowed; opacity: .58; }
 .glass-control-status { margin: 10px 0 0; padding: 9px 11px; border: 1px solid color-mix(in srgb, var(--warning) 32%, var(--line)); border-radius: 11px; background: color-mix(in srgb, var(--status-high-bg) 72%, transparent); color: var(--text); font-size: 13px; font-weight: 700; line-height: 1.4; }
 .range-labels { display: flex; justify-content: space-between; margin-top: -5px; color: var(--muted); font-size: 12px; font-weight: 700; }

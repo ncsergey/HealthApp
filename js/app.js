@@ -59,6 +59,14 @@ function showToast(message) {
 
 function showError(container, error) { container.textContent = error instanceof Error ? error.message : String(error); }
 
+function syncGlassRangeProgress(input) {
+  const minimum = Number(input.min);
+  const maximum = Number(input.max);
+  const value = Number(input.value);
+  const progress = maximum > minimum ? ((value - minimum) / (maximum - minimum)) * 100 : 0;
+  input.style.setProperty("--glass-range-progress", `${Math.min(100, Math.max(0, progress))}%`);
+}
+
 function renderInterfaceSettings() {
   for (const option of document.querySelectorAll("[data-theme-choice]")) {
     const selected = option.dataset.themeChoice === state.theme;
@@ -72,6 +80,7 @@ function renderInterfaceSettings() {
   transparency.value = String(state.uiSettings.glassTransparency);
   document.querySelector("#glass-transparency-value").value = `${state.uiSettings.glassTransparency}%`;
   transparency.setAttribute("aria-valuetext", `${state.uiSettings.glassTransparency} процентов`);
+  syncGlassRangeProgress(transparency);
   const isModern = state.uiSettings.interface === "modern";
   document.querySelector("#glass-transparency-card").hidden = !isModern;
   const effectsCard = document.querySelector("#glass-effects-card");
@@ -94,6 +103,7 @@ function renderInterfaceSettings() {
   blur.value = String(blurDisabled ? 0 : state.uiSettings.glassBlurIntensity);
   blurOutput.value = `${blurDisabled ? 0 : state.uiSettings.glassBlurIntensity}%`;
   blur.setAttribute("aria-valuetext", blurDisabled ? "0 процентов, размытие отключено выбранным режимом" : `${state.uiSettings.glassBlurIntensity} процентов`);
+  syncGlassRangeProgress(blur);
   blurStatus.hidden = !blurDisabled;
 }
 
@@ -112,6 +122,7 @@ function previewGlassTransparency(input) {
   const value = Number(input.value);
   try {
     applyGlassTransparency(value);
+    syncGlassRangeProgress(input);
     const rounded = Math.round(value);
     document.querySelector("#glass-transparency-value").value = `${rounded}%`;
     input.setAttribute("aria-valuetext", `${rounded} процентов`);
@@ -122,6 +133,7 @@ function previewGlassBlurIntensity(input) {
   const value = Number(input.value);
   try {
     applyGlassBlurIntensity(value);
+    syncGlassRangeProgress(input);
     const rounded = Math.round(value);
     document.querySelector("#glass-blur-value").value = `${rounded}%`;
     input.setAttribute("aria-valuetext", `${rounded} процентов`);

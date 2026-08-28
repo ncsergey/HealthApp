@@ -562,6 +562,7 @@ test("оба ползунка допускают дробный preview, не з
 test("ползунки доступны, имеют дробный drag и отдельную клавиатурную обработку по 1%", () => {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
   assert.match(html, /<label for="glass-transparency">Прозрачность<\/label>/);
   assert.match(html, /<output id="glass-transparency-value" for="glass-transparency">/);
   assert.match(html, /id="glass-transparency"[^>]+min="10"[^>]+max="60"[^>]+step="0\.01"/);
@@ -571,6 +572,12 @@ test("ползунки доступны, имеют дробный drag и от�
   assert.match(html, /Размытие отключено выбранным режимом/);
   assert.match(app, /handleGlassTransparencyKeydown[\s\S]+Math\.round\(Number\(event\.currentTarget\.value\)\) \+ direction/);
   assert.match(app, /handleGlassBlurIntensityKeydown[\s\S]+Math\.round\(Number\(event\.currentTarget\.value\)\) \+ direction/);
+  assert.match(app, /syncGlassRangeProgress[\s\S]+--glass-range-progress/);
+  assert.match(css, /--transparency-range: #286dcc/);
+  assert.match(css, /--blur-range: #c93f55/);
+  assert.match(css, /#glass-blur-intensity \{ --glass-range-color: var\(--blur-range\); \}/);
+  assert.match(css, /\.glass-control-card input\[type="range"\] \{[\s\S]+border-radius: 999px/);
+  assert.match(css, /\.glass-control-card input\[type="range"\]::\-webkit-slider-thumb[\s\S]+width: 26px[\s\S]+border: 3px solid var\(--intensity-thumb-border\)/);
 });
 
 test("CSS масштабирует full, ограничивает reduced и полностью отключает blur в none", () => {
