@@ -1,11 +1,17 @@
 export const UI_SETTINGS_KEY = "myhealth:ui-settings:v1";
+export const UI_THEME_KEY = "myhealth:theme:v1";
+export const DEFAULT_THEME = "auto";
 export const DEFAULT_GLASS_TRANSPARENCY = 25;
 export const DEFAULT_GLASS_EFFECTS = "reduced";
+export const DEFAULT_GLASS_BLUR_INTENSITY = 100;
 export const MIN_GLASS_TRANSPARENCY = 10;
-export const MAX_GLASS_TRANSPARENCY = 45;
+export const MAX_GLASS_TRANSPARENCY = 60;
+export const MIN_GLASS_BLUR_INTENSITY = 25;
+export const MAX_GLASS_BLUR_INTENSITY = 100;
 
 const INTERFACES = new Set(["classic", "modern"]);
 const GLASS_EFFECTS = new Set(["full", "reduced", "none"]);
+const THEMES = new Set(["auto", "light", "dark"]);
 
 export function isValidInterface(value) {
   return INTERFACES.has(value);
@@ -19,12 +25,47 @@ export function isValidGlassEffects(value) {
   return GLASS_EFFECTS.has(value);
 }
 
+export function isValidGlassBlurIntensity(value) {
+  return Number.isInteger(value) && value >= MIN_GLASS_BLUR_INTENSITY && value <= MAX_GLASS_BLUR_INTENSITY;
+}
+
+export function isValidTheme(value) {
+  return THEMES.has(value);
+}
+
+export function readTheme(storage = globalThis.localStorage) {
+  try {
+    const theme = storage.getItem(UI_THEME_KEY);
+    return isValidTheme(theme) ? theme : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveTheme(theme, storage = globalThis.localStorage) {
+  if (!isValidTheme(theme)) throw new Error("Некорректная тема интерфейса.");
+  storage.setItem(UI_THEME_KEY, theme);
+  return theme;
+}
+
+export function initializeTheme({ storage = globalThis.localStorage } = {}) {
+  const stored = readTheme(storage);
+  return stored || saveTheme(DEFAULT_THEME, storage);
+}
+
+export function applyTheme(theme, root = document.documentElement) {
+  if (!isValidTheme(theme)) throw new Error("Некорректная тема интерфейса.");
+  root.dataset.theme = theme;
+  return theme;
+}
+
 export function normalizeUiSettings(value) {
   if (!value || typeof value !== "object" || Array.isArray(value) || !isValidInterface(value.interface)) return null;
   return {
     interface: value.interface,
     glassTransparency: isValidGlassTransparency(value.glassTransparency) ? value.glassTransparency : DEFAULT_GLASS_TRANSPARENCY,
-    glassEffects: isValidGlassEffects(value.glassEffects) ? value.glassEffects : DEFAULT_GLASS_EFFECTS
+    glassEffects: isValidGlassEffects(value.glassEffects) ? value.glassEffects : DEFAULT_GLASS_EFFECTS,
+    glassBlurIntensity: isValidGlassBlurIntensity(value.glassBlurIntensity) ? value.glassBlurIntensity : DEFAULT_GLASS_BLUR_INTENSITY
   };
 }
 
@@ -52,6 +93,14 @@ export function applyGlassTransparency(value, root = document.documentElement) {
   root.style.setProperty("--glass-raised-opacity", `${Math.min(96, opacity + 12)}%`);
   root.style.setProperty("--glass-subtle-opacity", `${Math.max(42, opacity - 12)}%`);
   return transparency;
+}
+
+export function applyGlassBlurIntensity(value, root = document.documentElement) {
+  const intensity = Number(value);
+  if (!Number.isFinite(intensity) || intensity < MIN_GLASS_BLUR_INTENSITY || intensity > MAX_GLASS_BLUR_INTENSITY) throw new Error("Некорректная интенсивность размытия.");
+  root.style.setProperty("--glass-blur-intensity", `${intensity}%`);
+  root.style.setProperty("--glass-blur-scale", String(Number((intensity / 100).toFixed(4))));
+  return intensity;
 }
 
 function platformEvidence(navigatorLike = {}) {
@@ -86,11 +135,11 @@ export function detectInitialInterface(navigatorLike = {}) {
 export function initializeUiSettings({ storage = globalThis.localStorage, navigatorLike = globalThis.navigator, detect = detectInitialInterface } = {}) {
   const stored = readUiSettings(storage);
   if (stored) {
-    // Rewrite only to repair a missing/invalid transparency value; OS detection is intentionally skipped.
+    // Rewrite only to repair missing/invalid fields; OS detection is intentionally skipped.
     saveUiSettings(stored, storage);
     return stored;
   }
-  const selected = { interface: detect(navigatorLike), glassTransparency: DEFAULT_GLASS_TRANSPARENCY, glassEffects: DEFAULT_GLASS_EFFECTS };
+  const selected = { interface: detect(navigatorLike), glassTransparency: DEFAULT_GLASS_TRANSPARENCY, glassEffects: DEFAULT_GLASS_EFFECTS, glassBlurIntensity: DEFAULT_GLASS_BLUR_INTENSITY };
   return saveUiSettings(selected, storage);
 }
 
@@ -100,5 +149,6 @@ export function applyUiSettings(settings, root = document.documentElement) {
   root.dataset.interface = normalized.interface;
   root.dataset.glassEffects = normalized.glassEffects;
   applyGlassTransparency(normalized.glassTransparency, root);
+  applyGlassBlurIntensity(normalized.glassBlurIntensity, root);
   return normalized;
 }

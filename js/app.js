@@ -8,7 +8,7 @@ import { ageOnDate, calculateBmi, evaluateBmi, evaluateGlucose, evaluatePressure
 import { createElement as el, debounce, finiteInteger, makeId } from "./utils.js";
 import { DEFAULT_BODY_PARTS, UNIT_BY_ID, directoryItemById, formatMedicationAmount, formatMedicationDose, hasOngoingPainForBodyPart, normalizedNameKey, parseMedicationAmount, validateDirectoryName } from "./pain.js";
 import { DAY_PARTS, FOOD_RELATIONS, buildDaySchedule, isCourseCompletedOn, validateMedicationCourse } from "./medications.js";
-import { DEFAULT_GLASS_EFFECTS, DEFAULT_GLASS_TRANSPARENCY, MAX_GLASS_TRANSPARENCY, MIN_GLASS_TRANSPARENCY, applyGlassTransparency, applyUiSettings, detectInitialInterface, initializeUiSettings, saveUiSettings } from "./interface-settings.js";
+import { DEFAULT_GLASS_BLUR_INTENSITY, DEFAULT_GLASS_EFFECTS, DEFAULT_GLASS_TRANSPARENCY, DEFAULT_THEME, MAX_GLASS_BLUR_INTENSITY, MAX_GLASS_TRANSPARENCY, MIN_GLASS_BLUR_INTENSITY, MIN_GLASS_TRANSPARENCY, applyGlassBlurIntensity, applyGlassTransparency, applyTheme, applyUiSettings, detectInitialInterface, initializeTheme, initializeUiSettings, saveTheme, saveUiSettings } from "./interface-settings.js";
 
 const PAGE_SIZE = 60;
 const BIRTHDAY_EMOJIS = Object.freeze(["🎉", "🥳", "🎂", "🎊", "🎈", "🎁", "🍰"]);
@@ -26,15 +26,20 @@ let modalScrollY = 0;
 
 const initialUiSettings = (() => {
   try { return initializeUiSettings(); }
-  catch { return { interface: detectInitialInterface(globalThis.navigator), glassTransparency: DEFAULT_GLASS_TRANSPARENCY, glassEffects: DEFAULT_GLASS_EFFECTS }; }
+  catch { return { interface: detectInitialInterface(globalThis.navigator), glassTransparency: DEFAULT_GLASS_TRANSPARENCY, glassEffects: DEFAULT_GLASS_EFFECTS, glassBlurIntensity: DEFAULT_GLASS_BLUR_INTENSITY }; }
 })();
+const initialTheme = (() => {
+  try { return initializeTheme(); }
+  catch { return DEFAULT_THEME; }
+})();
+applyTheme(initialTheme);
 applyUiSettings(initialUiSettings);
 
 const state = {
   data: { profile: null, pressureMeasurements: [], pulseMeasurements: [], painEpisodes: [], glucoseMeasurements: [], weightMeasurements: [], bodyParts: [], medications: [], medicationCourses: [], medicationIntakes: [] },
   diaryFilter: "all", diaryLimit: PAGE_SIZE, statsMetric: "overview", pendingImport: null,
   pressureWarningAccepted: false, chartObservers: [], glucoseContext: "all", glucoseFormat: "all", painBodyPart: "all", directoryContext: null, activeDirectory: null,
-  medicationTab: "today", medicationDate: getMoscowFields().date, uiSettings: initialUiSettings
+  medicationTab: "today", medicationDate: getMoscowFields().date, uiSettings: initialUiSettings, theme: initialTheme
 };
 
 const elements = {
@@ -55,6 +60,10 @@ function showToast(message) {
 function showError(container, error) { container.textContent = error instanceof Error ? error.message : String(error); }
 
 function renderInterfaceSettings() {
+  for (const option of document.querySelectorAll("[data-theme-choice]")) {
+    const selected = option.dataset.themeChoice === state.theme;
+    option.classList.toggle("selected", selected); option.setAttribute("aria-checked", String(selected));
+  }
   for (const option of document.querySelectorAll("[data-interface-choice]")) {
     const selected = option.dataset.interfaceChoice === state.uiSettings.interface;
     option.classList.toggle("selected", selected); option.setAttribute("aria-checked", String(selected));
@@ -62,20 +71,40 @@ function renderInterfaceSettings() {
   const transparency = document.querySelector("#glass-transparency");
   transparency.value = String(state.uiSettings.glassTransparency);
   document.querySelector("#glass-transparency-value").value = `${state.uiSettings.glassTransparency}%`;
-  transparency.setAttribute("aria-valuetext", `${state.uiSettings.glassTransparency}%`);
-  document.querySelector("#glass-transparency-card").hidden = state.uiSettings.interface !== "modern";
+  transparency.setAttribute("aria-valuetext", `${state.uiSettings.glassTransparency} процентов`);
+  const isModern = state.uiSettings.interface === "modern";
+  document.querySelector("#glass-transparency-card").hidden = !isModern;
   const effectsCard = document.querySelector("#glass-effects-card");
-  effectsCard.hidden = state.uiSettings.interface !== "modern";
+  effectsCard.hidden = !isModern;
   for (const option of effectsCard.querySelectorAll("[data-glass-effects-choice]")) {
     const selected = option.dataset.glassEffectsChoice === state.uiSettings.glassEffects;
     option.classList.toggle("selected", selected);
     option.setAttribute("aria-checked", String(selected));
   }
+  const blurCard = document.querySelector("#glass-blur-card");
+  const blur = document.querySelector("#glass-blur-intensity");
+  const blurOutput = document.querySelector("#glass-blur-value");
+  const blurStatus = document.querySelector("#glass-blur-status");
+  const blurDisabled = state.uiSettings.glassEffects === "none";
+  blurCard.hidden = !isModern;
+  blur.disabled = blurDisabled;
+  blur.min = String(blurDisabled ? 0 : MIN_GLASS_BLUR_INTENSITY);
+  blur.max = String(blurDisabled ? 0 : MAX_GLASS_BLUR_INTENSITY);
+  blur.step = blurDisabled ? "1" : "0.01";
+  blur.value = String(blurDisabled ? 0 : state.uiSettings.glassBlurIntensity);
+  blurOutput.value = `${blurDisabled ? 0 : state.uiSettings.glassBlurIntensity}%`;
+  blur.setAttribute("aria-valuetext", blurDisabled ? "0 процентов, размытие отключено выбранным режимом" : `${state.uiSettings.glassBlurIntensity} процентов`);
+  blurStatus.hidden = !blurDisabled;
 }
 
 function persistUiSettings(nextSettings) {
   const saved = saveUiSettings(nextSettings);
   state.uiSettings = applyUiSettings(saved);
+  renderInterfaceSettings();
+}
+
+function persistTheme(nextTheme) {
+  state.theme = applyTheme(saveTheme(nextTheme));
   renderInterfaceSettings();
 }
 
@@ -85,8 +114,32 @@ function previewGlassTransparency(input) {
     applyGlassTransparency(value);
     const rounded = Math.round(value);
     document.querySelector("#glass-transparency-value").value = `${rounded}%`;
-    input.setAttribute("aria-valuetext", `${rounded}%`);
+    input.setAttribute("aria-valuetext", `${rounded} процентов`);
   } catch { /* The native range keeps preview values inside its bounds. */ }
+}
+
+function previewGlassBlurIntensity(input) {
+  const value = Number(input.value);
+  try {
+    applyGlassBlurIntensity(value);
+    const rounded = Math.round(value);
+    document.querySelector("#glass-blur-value").value = `${rounded}%`;
+    input.setAttribute("aria-valuetext", `${rounded} процентов`);
+  } catch { /* The native range keeps preview values inside its bounds. */ }
+}
+
+function commitGlassBlurIntensity(input) {
+  const intensity = Math.min(MAX_GLASS_BLUR_INTENSITY, Math.max(MIN_GLASS_BLUR_INTENSITY, Math.round(Number(input.value))));
+  input.value = String(intensity);
+  persistUiSettings({ ...state.uiSettings, glassBlurIntensity: intensity });
+}
+
+function handleGlassBlurIntensityKeydown(event) {
+  const direction = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1 }[event.key];
+  if (!direction) return;
+  event.preventDefault();
+  event.currentTarget.value = String(Math.min(MAX_GLASS_BLUR_INTENSITY, Math.max(MIN_GLASS_BLUR_INTENSITY, Math.round(Number(event.currentTarget.value)) + direction)));
+  commitGlassBlurIntensity(event.currentTarget);
 }
 
 function commitGlassTransparency(input) {
@@ -1020,12 +1073,17 @@ function bindEvents() {
   document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view)));
   document.querySelectorAll("[data-settings-target]").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.settingsTarget)));
   document.querySelector("#profile-back").addEventListener("click", () => switchView("settings")); document.querySelector("#interface-back").addEventListener("click", () => switchView("settings")); document.querySelector("#backup-back").addEventListener("click", () => switchView("settings"));
+  document.querySelectorAll("[data-theme-choice]").forEach((button) => button.addEventListener("click", () => { try { persistTheme(button.dataset.themeChoice); showToast("Тема изменена"); } catch (error) { showToast(error.message); } }));
   document.querySelectorAll("[data-interface-choice]").forEach((button) => button.addEventListener("click", () => { try { persistUiSettings({ ...state.uiSettings, interface: button.dataset.interfaceChoice }); showToast("Оформление изменено"); } catch (error) { showToast(error.message); } }));
   document.querySelectorAll("[data-glass-effects-choice]").forEach((button) => button.addEventListener("click", () => { try { persistUiSettings({ ...state.uiSettings, glassEffects: button.dataset.glassEffectsChoice }); showToast("Эффекты Liquid Glass изменены"); } catch (error) { showToast(error.message); } }));
   const glassTransparency = document.querySelector("#glass-transparency");
   glassTransparency.addEventListener("input", (event) => previewGlassTransparency(event.currentTarget));
   glassTransparency.addEventListener("change", (event) => { try { commitGlassTransparency(event.currentTarget); } catch (error) { applyUiSettings(state.uiSettings); renderInterfaceSettings(); showToast(error.message); } });
   glassTransparency.addEventListener("keydown", (event) => { try { handleGlassTransparencyKeydown(event); } catch (error) { applyUiSettings(state.uiSettings); renderInterfaceSettings(); showToast(error.message); } });
+  const glassBlurIntensity = document.querySelector("#glass-blur-intensity");
+  glassBlurIntensity.addEventListener("input", (event) => previewGlassBlurIntensity(event.currentTarget));
+  glassBlurIntensity.addEventListener("change", (event) => { try { commitGlassBlurIntensity(event.currentTarget); } catch (error) { applyUiSettings(state.uiSettings); renderInterfaceSettings(); showToast(error.message); } });
+  glassBlurIntensity.addEventListener("keydown", (event) => { try { handleGlassBlurIntensityKeydown(event); } catch (error) { applyUiSettings(state.uiSettings); renderInterfaceSettings(); showToast(error.message); } });
 
   document.querySelectorAll("[data-medication-tab]").forEach((button) => button.addEventListener("click", () => { state.medicationTab = button.dataset.medicationTab; renderMedications(); }));
   elements.medicationCourseAdd.addEventListener("click", () => openMedicationCourseForm()); elements.medicationsContent.addEventListener("click", handleMedicationAction);

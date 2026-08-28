@@ -9,7 +9,7 @@ import { formatMedicationDose, hasOngoingPainForBodyPart, normalizedNameKey, par
 import { filterDataForPeriod, glucoseStats, headacheStats, overviewStats, pressureStats, pulseStats, weightStats } from "../js/statistics.js";
 import { buildDaySchedule, dayPartForTime, isCourseCompletedOn, medicationStatistics, normalizeSchedule, validateMedicationCourse } from "../js/medications.js";
 import { createBackupPayload } from "../js/export.js";
-import { DEFAULT_GLASS_TRANSPARENCY, UI_SETTINGS_KEY, applyGlassTransparency, applyUiSettings, initializeUiSettings, readUiSettings, saveUiSettings } from "../js/interface-settings.js";
+import { DEFAULT_GLASS_BLUR_INTENSITY, DEFAULT_GLASS_TRANSPARENCY, DEFAULT_THEME, UI_SETTINGS_KEY, UI_THEME_KEY, applyGlassBlurIntensity, applyGlassTransparency, applyTheme, applyUiSettings, initializeTheme, initializeUiSettings, readTheme, readUiSettings, saveTheme, saveUiSettings } from "../js/interface-settings.js";
 
 function memoryStorage() {
   const values = new Map();
@@ -428,112 +428,213 @@ test("первичный интерфейс выбирается по надёж
     assert.equal(readUiSettings(storage).interface, expected);
     assert.equal(settings.glassTransparency, DEFAULT_GLASS_TRANSPARENCY);
     assert.equal(settings.glassEffects, "reduced");
+    assert.equal(settings.glassBlurIntensity, DEFAULT_GLASS_BLUR_INTENSITY);
   }
 });
 
-test("все режимы эффектов сохраняются и восстанавливаются без повторного определения ОС", () => {
+test("тема по умолчанию следует устройству и сохраняется независимо от остальных настроек", () => {
+  const storage = memoryStorage();
+  saveUiSettings({ interface: "modern", glassTransparency: 37, glassEffects: "full", glassBlurIntensity: 55 }, storage);
+  assert.equal(initializeTheme({ storage }), DEFAULT_THEME);
+  assert.equal(storage.getItem(UI_THEME_KEY), "auto");
+  for (const theme of ["light", "dark", "auto"]) {
+    assert.equal(saveTheme(theme, storage), theme);
+    assert.equal(readTheme(storage), theme);
+    assert.deepEqual(readUiSettings(storage), { interface: "modern", glassTransparency: 37, glassEffects: "full", glassBlurIntensity: 55 });
+  }
+  storage.setItem(UI_THEME_KEY, "sepia");
+  assert.equal(initializeTheme({ storage }), "auto");
+  assert.throws(() => saveTheme("sepia", storage), /тема интерфейса/);
+  const root = { dataset: {} };
+  assert.equal(applyTheme("dark", root), "dark");
+  assert.deepEqual(root.dataset, { theme: "dark" });
+  assert.throws(() => applyTheme("sepia", root), /тема интерфейса/);
+});
+
+test("переключатель темы содержит только эмодзи и доступные описания", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  for (const [theme, emoji, label] of [["auto", "📱", "Авто — тема определяется устройством"], ["light", "☀️", "Светлая — светлая тема"], ["dark", "🌙", "Тёмная — тёмная тема"]]) {
+    assert.match(html, new RegExp(`data-theme-choice="${theme}"[^>]+aria-label="${label}"[^>]*><span aria-hidden="true">${emoji}<\\/span><\\/button>`));
+  }
+});
+
+test("CSS поддерживает системную и обе принудительные темы", () => {
+  const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
+  assert.match(css, /html\[data-theme="light"\] \{ color-scheme: light; \}/);
+  assert.match(css, /html\[data-theme="dark"\] \{ color-scheme: dark; \}/);
+  assert.match(css, /:root\[data-theme="auto"\]/);
+  assert.match(css, /html\[data-theme="dark"\]\[data-interface="modern"\]/);
+});
+
+test("старые настройки мигрируют на интенсивность 100 без потери остальных полей", () => {
+  const storage = memoryStorage();
+  storage.setItem(UI_SETTINGS_KEY, JSON.stringify({ interface: "modern", glassTransparency: 60, glassEffects: "full" }));
+  assert.deepEqual(initializeUiSettings({ storage, detect: () => "classic" }), { interface: "modern", glassTransparency: 60, glassEffects: "full", glassBlurIntensity: 100 });
+  assert.deepEqual(JSON.parse(storage.getItem(UI_SETTINGS_KEY)), { interface: "modern", glassTransparency: 60, glassEffects: "full", glassBlurIntensity: 100 });
+});
+
+test("все режимы и обе интенсивности сохраняются без повторного определения ОС", () => {
   for (const [savedInterface, navigatorLike] of [["classic", { platform: "MacIntel" }], ["modern", { platform: "Win32" }]]) for (const glassEffects of ["full", "reduced", "none"]) {
-    const storage = memoryStorage(); saveUiSettings({ interface: savedInterface, glassTransparency: 31, glassEffects }, storage);
+    const storage = memoryStorage(); saveUiSettings({ interface: savedInterface, glassTransparency: 31, glassEffects, glassBlurIntensity: 57 }, storage);
     let detections = 0;
     const settings = initializeUiSettings({ storage, navigatorLike, detect: () => { detections += 1; return "classic"; } });
-    assert.deepEqual(settings, { interface: savedInterface, glassTransparency: 31, glassEffects }); assert.equal(detections, 0);
+    assert.deepEqual(settings, { interface: savedInterface, glassTransparency: 31, glassEffects, glassBlurIntensity: 57 }); assert.equal(detections, 0);
   }
 });
 
-test("ручной выбор режима и интерфейса перезаписывается, а прозрачность остаётся независимой", () => {
+test("границы прозрачности и размытия сохраняются и восстанавливаются", () => {
+  for (const glassTransparency of [10, 60]) for (const glassBlurIntensity of [25, 100]) {
+    const storage = memoryStorage();
+    saveUiSettings({ interface: "modern", glassTransparency, glassEffects: "full", glassBlurIntensity }, storage);
+    assert.deepEqual(readUiSettings(storage), { interface: "modern", glassTransparency, glassEffects: "full", glassBlurIntensity });
+  }
+});
+
+test("режим, интерфейс, прозрачность и размытие изменяются независимо", () => {
   const storage = memoryStorage(); let detections = 0;
   const detect = () => { detections += 1; return "classic"; };
   initializeUiSettings({ storage, detect });
-  saveUiSettings({ interface: "modern", glassTransparency: 45, glassEffects: "reduced" }, storage);
+  saveUiSettings({ interface: "modern", glassTransparency: 60, glassEffects: "reduced", glassBlurIntensity: 37 }, storage);
   saveUiSettings({ ...readUiSettings(storage), glassEffects: "none" }, storage);
-  assert.deepEqual(initializeUiSettings({ storage, detect }), { interface: "modern", glassTransparency: 45, glassEffects: "none" }); assert.equal(detections, 1);
+  assert.deepEqual(initializeUiSettings({ storage, detect }), { interface: "modern", glassTransparency: 60, glassEffects: "none", glassBlurIntensity: 37 }); assert.equal(detections, 1);
+  saveUiSettings({ ...readUiSettings(storage), glassBlurIntensity: 81 }, storage);
+  assert.deepEqual(readUiSettings(storage), { interface: "modern", glassTransparency: 60, glassEffects: "none", glassBlurIntensity: 81 });
   saveUiSettings({ ...readUiSettings(storage), interface: "classic" }, storage);
-  assert.deepEqual(readUiSettings(storage), { interface: "classic", glassTransparency: 45, glassEffects: "none" });
+  assert.deepEqual(readUiSettings(storage), { interface: "classic", glassTransparency: 60, glassEffects: "none", glassBlurIntensity: 81 });
   saveUiSettings({ ...readUiSettings(storage), interface: "modern" }, storage);
-  assert.deepEqual(readUiSettings(storage), { interface: "modern", glassTransparency: 45, glassEffects: "none" });
+  saveUiSettings({ ...readUiSettings(storage), glassEffects: "full" }, storage);
+  assert.deepEqual(readUiSettings(storage), { interface: "modern", glassTransparency: 60, glassEffects: "full", glassBlurIntensity: 81 });
   storage.removeItem(UI_SETTINGS_KEY);
   assert.equal(initializeUiSettings({ storage, detect }).interface, "classic"); assert.equal(detections, 2);
 });
 
-test("повреждённая или неизвестная настройка безопасно заменяется и не хранит источник выбора", () => {
+test("повреждённые поля заменяются отдельно и storage не хранит источник выбора", () => {
   const storage = memoryStorage(); storage.setItem(UI_SETTINGS_KEY, "{broken");
   const settings = initializeUiSettings({ storage, detect: () => "classic" });
-  assert.deepEqual(settings, { interface: "classic", glassTransparency: 25, glassEffects: "reduced" });
-  storage.setItem(UI_SETTINGS_KEY, JSON.stringify({ interface: "modern", glassTransparency: 37, glassEffects: "turbo" }));
-  assert.deepEqual(initializeUiSettings({ storage, detect: () => "classic" }), { interface: "modern", glassTransparency: 37, glassEffects: "reduced" });
+  assert.deepEqual(settings, { interface: "classic", glassTransparency: 25, glassEffects: "reduced", glassBlurIntensity: 100 });
+  for (const glassTransparency of [9, 61, 25.5, "25", null]) {
+    storage.setItem(UI_SETTINGS_KEY, JSON.stringify({ interface: "modern", glassTransparency, glassEffects: "full", glassBlurIntensity: 55 }));
+    assert.deepEqual(initializeUiSettings({ storage, detect: () => "classic" }), { interface: "modern", glassTransparency: 25, glassEffects: "full", glassBlurIntensity: 55 });
+  }
+  for (const glassBlurIntensity of [24, 101, 50.5, "50", null]) {
+    storage.setItem(UI_SETTINGS_KEY, JSON.stringify({ interface: "modern", glassTransparency: 37, glassEffects: "full", glassBlurIntensity }));
+    assert.deepEqual(initializeUiSettings({ storage, detect: () => "classic" }), { interface: "modern", glassTransparency: 37, glassEffects: "full", glassBlurIntensity: 100 });
+  }
+  storage.setItem(UI_SETTINGS_KEY, JSON.stringify({ interface: "modern", glassTransparency: 37, glassEffects: "turbo", glassBlurIntensity: 55, auto: true, deviceModel: "x" }));
+  assert.deepEqual(initializeUiSettings({ storage, detect: () => "classic" }), { interface: "modern", glassTransparency: 37, glassEffects: "reduced", glassBlurIntensity: 55 });
   const persisted = JSON.parse(storage.getItem(UI_SETTINGS_KEY));
-  assert.deepEqual(Object.keys(persisted).sort(), ["glassEffects", "glassTransparency", "interface"]);
+  assert.deepEqual(Object.keys(persisted).sort(), ["glassBlurIntensity", "glassEffects", "glassTransparency", "interface"]);
   assert.equal(JSON.stringify(persisted).includes("auto"), false); assert.equal(JSON.stringify(persisted).includes("manual"), false);
+  assert.equal(JSON.stringify(persisted).includes("deviceModel"), false);
 });
 
 test("режим применяется атрибутом темы и сохраняется при классическом интерфейсе", () => {
   const properties = new Map();
   const root = { dataset: {}, style: { setProperty: (name, value) => properties.set(name, value) } };
-  applyUiSettings({ interface: "classic", glassTransparency: 45, glassEffects: "reduced" }, root);
+  applyUiSettings({ interface: "classic", glassTransparency: 60, glassEffects: "reduced", glassBlurIntensity: 25 }, root);
   assert.deepEqual(root.dataset, { interface: "classic", glassEffects: "reduced" });
-  assert.equal(properties.get("--glass-transparency"), "45%");
-  applyUiSettings({ interface: "modern", glassTransparency: 45, glassEffects: "reduced" }, root);
+  assert.equal(properties.get("--glass-transparency"), "60%");
+  assert.equal(properties.get("--glass-blur-scale"), "0.25");
+  applyUiSettings({ interface: "modern", glassTransparency: 60, glassEffects: "reduced", glassBlurIntensity: 25 }, root);
   assert.deepEqual(root.dataset, { interface: "modern", glassEffects: "reduced" });
 });
 
-test("прозрачность допускает плавный дробный preview, но сохраняется целым процентом", () => {
+test("оба ползунка допускают дробный preview, не записывая его, и сохраняют округлённое целое", () => {
   const properties = new Map();
   const root = { style: { setProperty: (name, value) => properties.set(name, value) } };
+  const storage = memoryStorage();
+  saveUiSettings({ interface: "modern", glassTransparency: 25, glassEffects: "reduced", glassBlurIntensity: 100 }, storage);
   assert.equal(applyGlassTransparency(27.42, root), 27.42);
+  assert.equal(applyGlassBlurIntensity(53.67, root), 53.67);
   assert.equal(properties.get("--glass-transparency"), "27.42%");
   assert.equal(properties.get("--glass-opacity"), "72.58%");
-  assert.equal(saveUiSettings({ interface: "modern", glassTransparency: Math.round(27.42), glassEffects: "reduced" }, memoryStorage()).glassTransparency, 27);
+  assert.equal(properties.get("--glass-blur-intensity"), "53.67%");
+  assert.equal(properties.get("--glass-blur-scale"), "0.5367");
+  applyGlassTransparency(60, root);
+  assert.equal(properties.get("--glass-blur-scale"), "0.5367");
+  applyGlassBlurIntensity(25, root);
+  assert.equal(properties.get("--glass-transparency"), "60%");
+  assert.deepEqual(readUiSettings(storage), { interface: "modern", glassTransparency: 25, glassEffects: "reduced", glassBlurIntensity: 100 });
+  const committed = saveUiSettings({ ...readUiSettings(storage), glassTransparency: Math.round(27.42), glassBlurIntensity: Math.round(53.67) }, storage);
+  assert.deepEqual(committed, { interface: "modern", glassTransparency: 27, glassEffects: "reduced", glassBlurIntensity: 54 });
 });
 
-test("CSS ограничивает профили современным интерфейсом и полностью отключает blur в none", () => {
+test("ползунки доступны, имеют дробный drag и отдельную клавиатурную обработку по 1%", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
+  assert.match(html, /<label for="glass-transparency">Прозрачность<\/label>/);
+  assert.match(html, /<output id="glass-transparency-value" for="glass-transparency">/);
+  assert.match(html, /id="glass-transparency"[^>]+min="10"[^>]+max="60"[^>]+step="0\.01"/);
+  assert.match(html, /<label for="glass-blur-intensity">Размытие<\/label>/);
+  assert.match(html, /<output id="glass-blur-value" for="glass-blur-intensity">/);
+  assert.match(html, /id="glass-blur-intensity"[^>]+min="25"[^>]+max="100"[^>]+step="0\.01"/);
+  assert.match(html, /Размытие отключено выбранным режимом/);
+  assert.match(app, /handleGlassTransparencyKeydown[\s\S]+Math\.round\(Number\(event\.currentTarget\.value\)\) \+ direction/);
+  assert.match(app, /handleGlassBlurIntensityKeydown[\s\S]+Math\.round\(Number\(event\.currentTarget\.value\)\) \+ direction/);
+});
+
+test("CSS масштабирует full, ограничивает reduced и полностью отключает blur в none", () => {
   const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
   for (const line of css.split(/\r?\n/).filter((line) => line.includes("data-glass-effects"))) assert.match(line, /data-interface="modern"/);
+  assert.match(css, /\.app-header[\s\S]+blur\(calc\(24px \* var\(--glass-blur-scale\)\)\)/);
+  assert.match(css, /\.bottom-nav[\s\S]+blur\(calc\(28px \* var\(--glass-blur-scale\)\)\)/);
+  assert.match(css, /\.entry-card[\s\S]+blur\(calc\(22px \* var\(--glass-blur-scale\)\)\)/);
   assert.match(css, /data-glass-effects="reduced"[^}]+backdrop-filter: none !important/s);
-  assert.match(css, /data-glass-effects="reduced"\] \.app-header \{ backdrop-filter: saturate\(125%\) blur\(12px\)/);
+  assert.match(css, /data-glass-effects="reduced"\] \.app-header \{ backdrop-filter: saturate\(125%\) blur\(calc\(12px \* var\(--glass-blur-scale\)\)\)/);
+  assert.match(css, /data-glass-effects="reduced"\] \.bottom-nav \{ backdrop-filter: saturate\(130%\) blur\(calc\(14px \* var\(--glass-blur-scale\)\)\)/);
+  assert.match(css, /data-glass-effects="reduced"\] dialog \{ backdrop-filter: saturate\(125%\) blur\(calc\(15px \* var\(--glass-blur-scale\)\)\)/);
+  assert.doesNotMatch(css, /data-glass-effects="reduced"\] \.entry-card[^}]*backdrop-filter/);
   assert.match(css, /data-glass-effects="none"[^}]+backdrop-filter: none !important/s);
+  assert.match(css, /data-glass-effects="none"[^}]+-webkit-backdrop-filter: none !important/s);
   assert.doesNotMatch(css, /transition:[^;]*(?:backdrop-filter|filter)/);
   assert.doesNotMatch(css, /will-change/);
 });
 
-test("backup v9 экспортирует все режимы независимо от интерфейса без сведений об устройстве", () => {
+test("backup v10 экспортирует обе настройки независимо от интерфейса без сведений об устройстве", () => {
   const data = { ...emptyBackupData, profile: { id: "profile", heightCm: 180 }, weightMeasurements: [{ id: "w1", weight: 80 }], pressureMeasurements: [{ id: "p1", systolic: 120 }] };
-  for (const interfaceName of ["classic", "modern"]) for (const transparency of [10, 25, 45]) for (const glassEffects of ["full", "reduced", "none"]) {
-    const payload = createBackupPayload(data, { interface: interfaceName, glassTransparency: transparency, glassEffects }, "2026-08-21T10:15:30.000Z");
-    assert.equal(payload.version, 9); assert.equal(payload.exportedAt, "2026-08-21T10:15:30.000Z");
+  for (const interfaceName of ["classic", "modern"]) for (const transparency of [10, 25, 60]) for (const glassEffects of ["full", "reduced", "none"]) for (const glassBlurIntensity of [25, 100]) {
+    const payload = createBackupPayload(data, { interface: interfaceName, glassTransparency: transparency, glassEffects, glassBlurIntensity }, "2026-08-21T10:15:30.000Z");
+    assert.equal(payload.version, 10); assert.equal(payload.exportedAt, "2026-08-21T10:15:30.000Z");
     assert.equal(payload.profile.heightCm, 180); assert.equal(payload.weightMeasurements[0].weight, 80); assert.equal(payload.pressureMeasurements[0].systolic, 120);
-    assert.deepEqual(payload.settings, { interface: interfaceName, glassTransparency: transparency, glassEffects });
+    assert.deepEqual(payload.settings, { interface: interfaceName, glassTransparency: transparency, glassEffects, glassBlurIntensity });
     const json = JSON.stringify(payload); assert.equal(/"(?:auto|manual|detected|device|deviceModel|model|operatingSystem|userAgent|source)"\s*:/i.test(json), false);
   }
+  const repaired = createBackupPayload(data, { interface: "modern", glassTransparency: 25.5, glassEffects: "full", glassBlurIntensity: 50.5 });
+  assert.deepEqual(repaired.settings, { interface: "modern", glassTransparency: 25, glassEffects: "full", glassBlurIntensity: 100 });
 });
 
-test("backup v9 проходит полный цикл и восстанавливает каждый режим", async () => {
+test("backup v10 проходит полный цикл и восстанавливает допустимые значения", async () => {
   const record = { id: "w1", measuredAt: "2026-08-20T08:00:00.000Z", editedAt: "2026-08-20T08:01:00.000Z", weight: 82, comment: "" };
-  for (const glassEffects of ["full", "reduced", "none"]) {
-    const payload = createBackupPayload({ ...emptyBackupData, weightMeasurements: [record] }, { interface: "modern", glassTransparency: 37, glassEffects }, "2026-08-21T10:15:30.000Z");
+  for (const glassEffects of ["full", "reduced", "none"]) for (const glassBlurIntensity of [25, 57, 100]) {
+    const payload = createBackupPayload({ ...emptyBackupData, weightMeasurements: [record] }, { interface: "modern", glassTransparency: 60, glassEffects, glassBlurIntensity }, "2026-08-21T10:15:30.000Z");
     const parsed = await parseBackupFile(backupFile(payload));
-    assert.equal(parsed.weightMeasurements[0].weight, 82); assert.deepEqual(parsed.uiSettings, { interface: "modern", glassTransparency: 37, glassEffects });
+    assert.equal(parsed.weightMeasurements[0].weight, 82); assert.deepEqual(parsed.uiSettings, { interface: "modern", glassTransparency: 60, glassEffects, glassBlurIntensity });
   }
 });
 
-test("backup v9 отклоняет некорректный режим и повреждённый JSON без изменения текущего состояния", async () => {
-  const valid = createBackupPayload(emptyBackupData, { interface: "classic", glassTransparency: 25, glassEffects: "full" }, "2026-08-21T10:15:30.000Z");
-  for (const settings of [{ interface: "automatic", glassTransparency: 25, glassEffects: "full" }, { interface: "modern", glassTransparency: 9, glassEffects: "full" }, { interface: "modern", glassTransparency: 46, glassEffects: "full" }]) {
+test("backup v10 отклоняет неизвестные, дробные и выходящие за диапазон значения атомарно", async () => {
+  const valid = createBackupPayload(emptyBackupData, { interface: "classic", glassTransparency: 25, glassEffects: "full", glassBlurIntensity: 100 }, "2026-08-21T10:15:30.000Z");
+  for (const settings of [{ ...valid.settings, interface: "automatic" }, { ...valid.settings, glassTransparency: 9 }, { ...valid.settings, glassTransparency: 61 }, { ...valid.settings, glassTransparency: 25.5 }]) {
     await assert.rejects(() => parseBackupFile(backupFile({ ...valid, settings })), /настройки интерфейса/);
   }
   for (const glassEffects of ["turbo", null, 1]) await assert.rejects(() => parseBackupFile(backupFile({ ...valid, settings: { ...valid.settings, glassEffects } })), /режим эффектов/);
-  const current = { records: ["unchanged"], settings: { interface: "modern", glassTransparency: 45, glassEffects: "none" } };
+  for (const glassBlurIntensity of [24, 101, 50.5, "50", null]) await assert.rejects(() => parseBackupFile(backupFile({ ...valid, settings: { ...valid.settings, glassBlurIntensity } })), /интенсивность размытия/);
+  const current = { records: ["unchanged"], settings: { interface: "modern", glassTransparency: 60, glassEffects: "none", glassBlurIntensity: 57 } };
   await assert.rejects(() => parseBackupFile({ size: 8, text: async () => "{broken" }), /прочитать JSON/);
-  assert.deepEqual(current, { records: ["unchanged"], settings: { interface: "modern", glassTransparency: 45, glassEffects: "none" } });
+  assert.deepEqual(current, { records: ["unchanged"], settings: { interface: "modern", glassTransparency: 60, glassEffects: "none", glassBlurIntensity: 57 } });
 });
 
-test("старые резервные копии импортируются без сброса отсутствующего режима", async () => {
+test("backup 1–9 сохраняют текущую интенсивность, а без текущего значения получают 100", async () => {
   const legacy = { format: "health-diary-backup", version: 7, exportedAt: "2026-08-17T08:00:00Z", ...emptyBackupData };
   const parsed = await parseBackupFile(backupFile(legacy));
   assert.equal(parsed.uiSettings, null);
   const version8 = { ...legacy, version: 8, settings: { interface: "classic", glassTransparency: 31 } };
   const parsed8 = await parseBackupFile(backupFile(version8));
   assert.deepEqual(parsed8.uiSettings, { interface: "classic", glassTransparency: 31 });
-  assert.deepEqual({ interface: "modern", glassTransparency: 45, glassEffects: "reduced", ...parsed8.uiSettings }, { interface: "classic", glassTransparency: 31, glassEffects: "reduced" });
-  const storageWithoutCurrentMode = memoryStorage();
-  assert.deepEqual(saveUiSettings(parsed8.uiSettings, storageWithoutCurrentMode), { interface: "classic", glassTransparency: 31, glassEffects: "reduced" });
+  const version9 = { ...legacy, version: 9, settings: { interface: "modern", glassTransparency: 60, glassEffects: "none" } };
+  const parsed9 = await parseBackupFile(backupFile(version9));
+  assert.deepEqual(parsed9.uiSettings, { interface: "modern", glassTransparency: 60, glassEffects: "none" });
+  assert.deepEqual({ interface: "modern", glassTransparency: 45, glassEffects: "reduced", glassBlurIntensity: 57, ...parsed9.uiSettings }, { interface: "modern", glassTransparency: 60, glassEffects: "none", glassBlurIntensity: 57 });
+  const storageWithoutCurrentIntensity = memoryStorage();
+  assert.deepEqual(saveUiSettings(parsed9.uiSettings, storageWithoutCurrentIntensity), { interface: "modern", glassTransparency: 60, glassEffects: "none", glassBlurIntensity: 100 });
 });
