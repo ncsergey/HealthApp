@@ -171,17 +171,26 @@ legend { margin-bottom: 10px; color: var(--muted); font-size: 12px; font-weight:
 .intensity-range-track::after {
   content: "";
   position: absolute;
-  z-index: 2;
+  z-index: 3;
   inset: 0;
   border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
   border-radius: inherit;
+}
+.intensity-range-track::before {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: var(--intensity-progress);
+  background: var(--intensity-track);
 }
 .intensity-range-fill {
   position: absolute;
   z-index: 1;
   inset: 0;
   background: linear-gradient(to right, var(--intensity-low), var(--intensity-medium) 50%, var(--intensity-high));
-  clip-path: inset(0 calc(100% - var(--intensity-progress)) 0 0);
 }
 .range-field input[type="range"] {
   position: relative;
@@ -197,9 +206,12 @@ legend { margin-bottom: 10px; color: var(--muted); font-size: 12px; font-weight:
   touch-action: pan-x;
 }
 .range-field input[type="range"]::-webkit-slider-runnable-track {
+  appearance: none;
+  -webkit-appearance: none;
   height: 10px;
   border: 0;
   background: transparent;
+  box-shadow: none;
 }
 .range-field input[type="range"]::-webkit-slider-thumb {
   appearance: none;

@@ -610,9 +610,11 @@ test("ползунки боли используют отдельную доро
   assert.equal((html.match(/class="intensity-range-fill"/g) || []).length, 3);
   assert.match(app, /updateIntensityDisplay[\s\S]+closest\("\.intensity-range-control"\)[\s\S]+--intensity-progress/);
   assert.match(css, /\.intensity-range-track \{[\s\S]+overflow: hidden[\s\S]+background: var\(--intensity-track\)/);
-  assert.match(css, /\.intensity-range-track::after \{[\s\S]+z-index: 2[\s\S]+border: 1px solid/);
+  assert.match(css, /\.intensity-range-track::before \{[\s\S]+z-index: 2[\s\S]+right: 0[\s\S]+left: var\(--intensity-progress\)[\s\S]+background: var\(--intensity-track\)/);
+  assert.match(css, /\.intensity-range-track::after \{[\s\S]+z-index: 3[\s\S]+border: 1px solid/);
   assert.match(css, /\.intensity-range-fill \{[\s\S]+z-index: 1/);
-  assert.match(css, /\.intensity-range-fill \{[\s\S]+clip-path: inset\(0 calc\(100% - var\(--intensity-progress\)\) 0 0\)/);
+  assert.doesNotMatch(css, /clip-path:[^;]*--intensity-progress/);
+  assert.match(css, /::-webkit-slider-runnable-track \{[\s\S]+-webkit-appearance: none[\s\S]+background: transparent[\s\S]+box-shadow: none/);
   assert.doesNotMatch(css, /linear-gradient\(to right, transparent 0, transparent var\(--intensity-progress\)/);
 });
 
