@@ -27,7 +27,7 @@
   <div class="app-shell">
     <div class="top-chrome-anchor">
       <header class="app-header">
-        <div class="brand"><span id="brand-icon-container" class="brand-icon-container" aria-hidden="true"><img class="brand-icon" src="./icons/icon-192.png" alt=""><span class="brand-emoji" hidden></span></span><div><p class="eyebrow">Дневник здоровья · <button id="app-version" class="app-version" type="button" disabled aria-label="Версия v146">v146</button></p><h1>MyHealth</h1></div></div>
+        <div class="brand"><span id="brand-icon-container" class="brand-icon-container" aria-hidden="true"><img class="brand-icon" src="./icons/icon-192.png" alt=""><span class="brand-emoji" hidden></span></span><div><p class="eyebrow">Дневник здоровья · <button id="app-version" class="app-version" type="button" disabled aria-label="Версия v147">v147</button></p><h1>MyHealth</h1></div></div>
         <div class="header-actions"><button id="settings-button" class="icon-button" type="button" data-view="settings" data-settings-root aria-label="Настройки" title="Настройки"><span aria-hidden="true">⚙️</span></button></div>
       </header>
     </div>
@@ -159,7 +159,7 @@
   </div>
 
   <dialog id="entry-type-dialog" class="sheet compact-choice-sheet">
-    <div class="dialog-header"><div><p class="eyebrow">Новая запись</p><h2>Что добавить?</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть">✕</button></div>
+    <div class="dialog-header"><div><p class="eyebrow">Новая запись</p><h2>Что добавить?</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть"><svg class="close-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 3 21 21 M21 3 3 21"></path></svg></button></div>
     <div class="choice-grid">
       <button id="choose-headache" class="choice-card headache-choice" type="button"><span class="choice-icon" aria-hidden="true">⚡</span><strong>Боль</strong></button>
       <button id="choose-pressure" class="choice-card pressure-choice" type="button"><span class="choice-icon" aria-hidden="true">🩺</span><strong>Давление</strong></button>
@@ -171,7 +171,7 @@
   </dialog>
 
   <dialog id="pressure-dialog" class="sheet form-sheet entry-form-dialog"><form id="pressure-form" novalidate>
-    <div class="dialog-header"><div><p class="eyebrow">Дневник давления</p><h2 id="pressure-form-title">Новое измерение</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть">✕</button></div>
+    <div class="dialog-header"><div><p class="eyebrow">Дневник давления</p><h2 id="pressure-form-title">Новое измерение</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть"><svg class="close-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 3 21 21 M21 3 3 21"></path></svg></button></div>
     <div class="entry-form-content"><input id="pressure-id" type="hidden">
       <label class="field"><span>Дата и время</span><input id="pressure-datetime" type="datetime-local" required></label>
       <div class="field-grid two"><label class="field"><span>Верхнее</span><input id="systolic" type="number" inputmode="numeric" min="30" max="300" required></label><label class="field"><span>Нижнее</span><input id="diastolic" type="number" inputmode="numeric" min="10" max="180" required></label></div>
@@ -180,7 +180,7 @@
   </form></dialog>
 
   <dialog id="pulse-dialog" class="sheet form-sheet entry-form-dialog"><form id="pulse-form" novalidate>
-    <div class="dialog-header"><div><p class="eyebrow">Дневник пульса</p><h2 id="pulse-form-title">Новое измерение</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть">✕</button></div>
+    <div class="dialog-header"><div><p class="eyebrow">Дневник пульса</p><h2 id="pulse-form-title">Новое измерение</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть"><svg class="close-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 3 21 21 M21 3 3 21"></path></svg></button></div>
     <div class="entry-form-content"><input id="pulse-id" type="hidden">
       <label class="field"><span>Дата и время</span><input id="pulse-datetime" type="datetime-local" required></label>
       <label class="field"><span>Пульс, уд/мин</span><input id="pulse-value" type="number" inputmode="numeric" min="20" max="400" step="1" required></label>
@@ -191,7 +191,7 @@
   </form></dialog>
 
   <dialog id="headache-dialog" class="sheet form-sheet entry-form-dialog"><form id="headache-form" novalidate>
-    <div class="dialog-header"><div><p class="eyebrow">Дневник боли</p><h2 id="headache-form-title">Новый эпизод</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть">✕</button></div>
+    <div class="dialog-header"><div><p class="eyebrow">Дневник боли</p><h2 id="headache-form-title">Новый эпизод</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть"><svg class="close-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 3 21 21 M21 3 3 21"></path></svg></button></div>
     <div class="entry-form-content"><input id="headache-id" type="hidden">
       <div class="combobox-row"><label class="field select-field"><span>Часть тела</span><select id="body-part" required></select></label><button id="add-body-part" class="add-directory-button" type="button" aria-label="Добавить часть тела">+</button></div>
       <section id="headache-step-time" class="headache-step" aria-label="Время приступа"><fieldset><legend>Начало</legend><label class="field"><span>Дата и время</span><input id="headache-start-datetime" type="datetime-local" required></label></fieldset><label class="check-field"><input id="headache-ongoing" type="checkbox" checked><span><strong>Приступ продолжается</strong><small>Окончание можно добавить позже</small></span></label><fieldset id="headache-end-fields" disabled><legend>Окончание</legend><label class="field"><span>Дата и время</span><input id="headache-end-datetime" type="datetime-local"></label></fieldset></section>
@@ -209,13 +209,13 @@
   </form></dialog>
 
   <dialog id="directory-item-dialog" class="sheet form-sheet"><form id="directory-item-form" novalidate>
-    <div class="dialog-header"><div><p class="eyebrow">Справочник</p><h2 id="directory-item-title">Добавить</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть">✕</button></div>
+    <div class="dialog-header"><div><p class="eyebrow">Справочник</p><h2 id="directory-item-title">Добавить</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть"><svg class="close-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 3 21 21 M21 3 3 21"></path></svg></button></div>
     <input id="directory-item-id" type="hidden"><label class="field"><span id="directory-item-label">Название</span><input id="directory-item-name" type="text" maxlength="100" required></label><p id="directory-item-error" class="form-error" role="alert"></p>
     <div class="dialog-actions"><button class="secondary-button" type="button" data-close>Отмена</button><button id="directory-item-save" class="primary-button" type="submit">Добавить</button></div>
   </form></dialog>
 
   <dialog id="medication-course-dialog" class="sheet form-sheet entry-form-dialog"><form id="medication-course-form" novalidate>
-    <div class="dialog-header"><div><p class="eyebrow">Назначение</p><h2 id="medication-course-title">Новый курс</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть">✕</button></div>
+    <div class="dialog-header"><div><p class="eyebrow">Назначение</p><h2 id="medication-course-title">Новый курс</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть"><svg class="close-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 3 21 21 M21 3 3 21"></path></svg></button></div>
     <div class="entry-form-content"><input id="medication-course-id" type="hidden">
       <div class="combobox-row"><label class="field select-field"><span>Лекарство</span><select id="course-medication" required></select></label><button id="course-add-medication" class="add-directory-button" type="button" aria-label="Добавить лекарство">+</button></div>
       <div class="field-grid two"><label class="field"><span>Количество</span><input id="course-amount" type="text" inputmode="decimal" placeholder="1 или 1,5" required></label><label class="field select-field"><span>Единица</span><select id="course-unit" required><option value="">Выберите</option><option value="piece">шт.</option><option value="tablet">табл.</option><option value="ampoule">амп.</option><option value="drop">кап.</option><option value="teaspoon">ч. л.</option><option value="tablespoon">ст. л.</option><option value="milligram">мг</option><option value="milliliter">мл</option></select></label></div>
@@ -228,7 +228,7 @@
   </form></dialog>
 
   <dialog id="glucose-dialog" class="sheet form-sheet entry-form-dialog"><form id="glucose-form" novalidate>
-    <div class="dialog-header"><div><p class="eyebrow">Дневник глюкозы</p><h2 id="glucose-form-title">Новое измерение</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть">✕</button></div>
+    <div class="dialog-header"><div><p class="eyebrow">Дневник глюкозы</p><h2 id="glucose-form-title">Новое измерение</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть"><svg class="close-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 3 21 21 M21 3 3 21"></path></svg></button></div>
     <div class="entry-form-content"><input id="glucose-id" type="hidden"><label class="field"><span>Дата и время</span><input id="glucose-datetime" type="datetime-local" required></label>
       <label class="field"><span>Глюкоза, ммоль/л</span><input id="glucose-value" type="text" inputmode="decimal" required></label>
       <label class="field select-field"><span>Формат результата</span><select id="glucose-format" required><option value="plasma">Эквивалент плазмы</option><option value="wholeBlood">Цельная кровь</option></select></label>
@@ -239,20 +239,20 @@
   </form></dialog>
 
   <dialog id="weight-dialog" class="sheet form-sheet entry-form-dialog"><form id="weight-form" novalidate>
-    <div class="dialog-header"><div><p class="eyebrow">Дневник веса</p><h2 id="weight-form-title">Новое измерение</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть">✕</button></div>
+    <div class="dialog-header"><div><p class="eyebrow">Дневник веса</p><h2 id="weight-form-title">Новое измерение</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть"><svg class="close-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 3 21 21 M21 3 3 21"></path></svg></button></div>
     <div class="entry-form-content"><input id="weight-id" type="hidden"><label class="field"><span>Дата и время</span><input id="weight-datetime" type="datetime-local" required></label><label class="field"><span>Вес, кг</span><input id="weight-value" type="number" inputmode="numeric" min="1" max="700" step="1" required></label><label class="field"><span>Комментарий <small>необязательно</small></span><textarea id="weight-comment" rows="3" maxlength="1000"></textarea></label><p id="weight-error" class="form-error" role="alert"></p></div>
     <div class="dialog-actions"><button class="secondary-button" type="button" data-close>Отмена</button><button id="weight-save" class="primary-button" type="submit">Сохранить</button></div>
   </form></dialog>
 
   <dialog id="profile-dialog" class="sheet form-sheet"><form id="profile-form" novalidate>
-    <div class="dialog-header"><div><p class="eyebrow">Личный профиль</p><h2 id="profile-form-title">Заполнить данные</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть">✕</button></div>
+    <div class="dialog-header"><div><p class="eyebrow">Личный профиль</p><h2 id="profile-form-title">Заполнить данные</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть"><svg class="close-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 3 21 21 M21 3 3 21"></path></svg></button></div>
     <label class="field"><span>Дата рождения</span><input id="profile-birth-date" type="date" required></label>
     <label class="field select-field"><span>Пол</span><select id="profile-sex" required><option value="">Выберите</option><option value="male">Мужской</option><option value="female">Женский</option></select></label>
     <label class="field"><span>Рост, см</span><input id="profile-height" type="number" inputmode="numeric" min="50" max="300" step="1" required></label>
     <p id="profile-error" class="form-error" role="alert"></p><div class="dialog-actions"><button class="secondary-button" type="button" data-close>Отмена</button><button id="profile-save" class="primary-button" type="submit">Сохранить</button></div>
   </form></dialog>
 
-  <dialog id="import-dialog" class="sheet"><div class="dialog-header"><div><p class="eyebrow">Проверенный файл</p><h2>Резервная копия</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть">✕</button></div><div id="import-summary" class="import-summary"></div><p class="muted">При совпадении ID останется запись с более новым <code>editedAt</code>.</p><div class="stack-actions"><button id="import-merge" class="secondary-button wide" type="button">Добавить к существующим</button><button id="import-replace" class="danger-button wide" type="button">Заменить все данные</button></div><p id="import-error" class="form-error" role="alert"></p></dialog>
+  <dialog id="import-dialog" class="sheet"><div class="dialog-header"><div><p class="eyebrow">Проверенный файл</p><h2>Резервная копия</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть"><svg class="close-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 3 21 21 M21 3 3 21"></path></svg></button></div><div id="import-summary" class="import-summary"></div><p class="muted">При совпадении ID останется запись с более новым <code>editedAt</code>.</p><div class="stack-actions"><button id="import-merge" class="secondary-button wide" type="button">Добавить к существующим</button><button id="import-replace" class="danger-button wide" type="button">Заменить все данные</button></div><p id="import-error" class="form-error" role="alert"></p></dialog>
   <dialog id="confirm-dialog" class="confirm-dialog"><h2 id="confirm-title">Подтверждение</h2><p id="confirm-message"></p><div class="dialog-actions"><button id="confirm-cancel" class="secondary-button" type="button">Отмена</button><button id="confirm-ok" class="danger-button" type="button">Подтвердить</button></div></dialog>
   <dialog id="backup-prompt-dialog" class="confirm-dialog backup-prompt-dialog" aria-labelledby="backup-prompt-title"><p class="eyebrow">Резервная копия</p><h2 id="backup-prompt-title">Сохранить данные в JSON?</h2><p>Данные изменены. JSON-файл будет содержать всю актуальную базу MyHealth.</p><p class="muted">Если выбрать «Позже», приложение повторит запрос при следующем изменении или запуске.</p><label class="check-field"><input id="backup-dont-remind" type="checkbox"><span><strong>Больше не напоминать</strong><small>До следующего изменения данных</small></span></label><p id="backup-prompt-error" class="form-error" role="alert"></p><div class="dialog-actions"><button id="backup-later" class="secondary-button" type="button"><strong>Позже</strong></button><button id="backup-save" class="primary-button" type="button">Сохранить</button></div></dialog>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>

@@ -689,6 +689,17 @@ test("современные формы используют плавающие 
   assert.match(css, /html\[data-interface="modern"\] \.entry-form-dialog \.entry-form-content \{ padding: 4px 6px; \}/);
 });
 
+test("все кнопки закрытия используют симметричный SVG-крестик", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
+  assert.equal(html.match(/class="close-button"/g)?.length, 10);
+  assert.equal(html.match(/<svg class="close-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">/g)?.length, 10);
+  assert.equal(html.match(/<path d="M3 3 21 21 M21 3 3 21"><\/path>/g)?.length, 10);
+  assert.doesNotMatch(html, />✕<\/button>/);
+  assert.match(css, /\.close-icon \{ display: block; width: 24px; height: 24px; overflow: visible; \}/);
+  assert.match(css, /\.close-icon path \{[^}]+stroke: currentColor[^}]+stroke-width: 2\.25[^}]+stroke-linecap: round/);
+});
+
 test("эмодзи справочников используют обводку современных карточек", () => {
   const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
   assert.match(css, /html\[data-interface="modern"\] \.settings-icon,\s*html\[data-interface="modern"\] \.overview-icon,\s*html\[data-interface="modern"\] \.directory-choice-icon \{[^}]+border: 1px solid rgba\(255,255,255,\.62\)[^}]+box-shadow: inset 0 1px rgba\(255,255,255,\.7\)/);
