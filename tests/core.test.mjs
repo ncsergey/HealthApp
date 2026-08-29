@@ -612,9 +612,11 @@ test("в современном интерфейсе шапка и нижнее 
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   assert.match(css, /--floating-chrome-gap: 12px/);
   assert.match(css, /--floating-chrome-height: 71px/);
-  assert.match(html, /<div class="top-chrome-anchor">\s+<header class="app-header">/);
-  assert.match(html, /<div class="bottom-chrome-anchor">\s+<nav class="bottom-nav"/);
-  assert.match(css, /html\[data-interface="modern"\] \.top-chrome-anchor,[\s\S]+html\[data-interface="modern"\] \.bottom-chrome-anchor \{[\s\S]+position: fixed[\s\S]+display: flex[\s\S]+padding-right: calc\(var\(--floating-chrome-gap\) \+ var\(--safe-right\)\)[\s\S]+padding-left: calc\(var\(--floating-chrome-gap\) \+ var\(--safe-left\)\)[\s\S]+pointer-events: none/);
+  assert.match(html, /<div class="app-shell">\s+<div class="top-chrome-anchor">\s+<header class="app-header">/);
+  assert.match(html, /<div class="bottom-chrome-anchor">\s+<nav class="bottom-nav"[\s\S]+<\/nav>\s+<\/div>\s+<\/div>\s+<dialog/);
+  assert.match(css, /\.app-shell, \.top-chrome-anchor, \.bottom-chrome-anchor \{ display: contents; \}/);
+  assert.match(css, /html\[data-interface="modern"\] \.app-shell \{[\s\S]+position: absolute[\s\S]+inset: 0[\s\S]+display: block[\s\S]+overflow: hidden/);
+  assert.match(css, /html\[data-interface="modern"\] \.top-chrome-anchor,[\s\S]+html\[data-interface="modern"\] \.bottom-chrome-anchor \{[\s\S]+position: absolute[\s\S]+display: flex[\s\S]+padding-right: calc\(var\(--floating-chrome-gap\) \+ var\(--safe-right\)\)[\s\S]+padding-left: calc\(var\(--floating-chrome-gap\) \+ var\(--safe-left\)\)[\s\S]+pointer-events: none/);
   assert.match(css, /html\[data-interface="modern"\] \.top-chrome-anchor \{[\s\S]+top: 0[\s\S]+padding-top: calc\(var\(--floating-chrome-gap\) \+ var\(--safe-top\)\)/);
   assert.match(css, /html\[data-interface="modern"\] \.bottom-chrome-anchor \{[\s\S]+bottom: 0[\s\S]+padding-bottom: calc\(var\(--floating-chrome-gap\) \+ var\(--safe-bottom\)\)/);
   assert.match(css, /html\[data-interface="modern"\] \.app-header \{[\s\S]+position: relative[\s\S]+width: min\(100%, 680px\)[\s\S]+height: var\(--floating-chrome-height\)[\s\S]+transform: none[\s\S]+pointer-events: auto/);
@@ -628,6 +630,19 @@ test("safe-area плавающих панелей полностью управ�
   const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
   assert.match(app, /handleVisualViewportChange = debounce\(\(\) => \{ syncVisualViewport\(\); ensureFocusedEntryFieldVisible\(\); \}, 80\)/);
   assert.doesNotMatch(app, /chromeSafeInset|measureSafeAreaInset|syncChromeSafeInset|handleViewportOrientation|orientationchange/);
+});
+
+test("современный интерфейс прокручивает только содержимое неподвижной оболочки", () => {
+  const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
+  const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
+  assert.match(css, /html\[data-interface="modern"\] body \{[\s\S]+height: 100%[\s\S]+overflow: hidden[\s\S]+overscroll-behavior: none/);
+  assert.match(css, /html\[data-interface="modern"\] \{[\s\S]+height: 100%[\s\S]+overflow: hidden[\s\S]+overscroll-behavior: none/);
+  assert.match(css, /html\[data-interface="modern"\] \.app-main \{[\s\S]+position: absolute[\s\S]+inset: 0[\s\S]+overflow-x: hidden[\s\S]+overflow-y: auto[\s\S]+overscroll-behavior-y: contain[\s\S]+-webkit-overflow-scrolling: touch/);
+  assert.match(css, /html\[data-interface="modern"\]\.modal-open \.app-main \{ overflow-y: hidden; overscroll-behavior: none; \}/);
+  assert.doesNotMatch(css, /html\[data-interface="modern"\] \.top-chrome-anchor,[\s\S]{0,500}position: fixed/);
+  assert.match(app, /function pageScrollContainer\(\)[\s\S]+dataset\.interface === "modern"[\s\S]+querySelector\("\.app-main"\)[\s\S]+document\.scrollingElement/);
+  assert.match(app, /function scrollPageToTop\(behavior = "smooth"\)[\s\S]+pageScrollContainer\(\)[\s\S]+scroller\?\.scrollTo/);
+  assert.match(app, /modalScrollY = modern \? scroller\?\.scrollTop \|\| 0 : window\.scrollY/);
 });
 
 test("в современном интерфейсе дневниковые фильтры занимают всю ширину в альбомной ориентации", () => {

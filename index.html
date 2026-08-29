@@ -24,14 +24,15 @@
   </script>
 </head>
 <body>
-  <div class="top-chrome-anchor">
-    <header class="app-header">
-      <div class="brand"><span id="brand-icon-container" class="brand-icon-container" aria-hidden="true"><img class="brand-icon" src="./icons/icon-192.png" alt=""><span class="brand-emoji" hidden></span></span><div><p class="eyebrow">Дневник здоровья · <button id="app-version" class="app-version" type="button" disabled aria-label="Версия v140">v140</button></p><h1>MyHealth</h1></div></div>
-      <div class="header-actions"><button id="settings-button" class="icon-button" type="button" data-view="settings" data-settings-root aria-label="Настройки" title="Настройки"><span aria-hidden="true">⚙️</span></button></div>
-    </header>
-  </div>
+  <div class="app-shell">
+    <div class="top-chrome-anchor">
+      <header class="app-header">
+        <div class="brand"><span id="brand-icon-container" class="brand-icon-container" aria-hidden="true"><img class="brand-icon" src="./icons/icon-192.png" alt=""><span class="brand-emoji" hidden></span></span><div><p class="eyebrow">Дневник здоровья · <button id="app-version" class="app-version" type="button" disabled aria-label="Версия v141">v141</button></p><h1>MyHealth</h1></div></div>
+        <div class="header-actions"><button id="settings-button" class="icon-button" type="button" data-view="settings" data-settings-root aria-label="Настройки" title="Настройки"><span aria-hidden="true">⚙️</span></button></div>
+      </header>
+    </div>
 
-  <main id="app" class="app-main">
+    <main id="app" class="app-main">
     <div id="offline-banner" class="status-banner" hidden>Офлайн-режим · все функции доступны</div>
     <div id="storage-warning" class="status-banner warning" hidden>iOS может очистить локальные данные. Регулярно сохраняйте JSON-копию.</div>
 
@@ -143,15 +144,16 @@
       <div id="medications-content" aria-live="polite"></div>
       <button id="medication-course-add" class="add-button" type="button" aria-label="Добавить курс лекарства" hidden><span aria-hidden="true">➕</span></button>
     </section>
-  </main>
+    </main>
 
-  <div class="bottom-chrome-anchor">
-    <nav class="bottom-nav" aria-label="Основные разделы">
-      <button class="active" type="button" data-view="diary" aria-current="page" aria-label="Дневник"><span class="nav-icon" aria-hidden="true">📝</span><span class="nav-label">Дневник</span></button>
-      <button type="button" data-view="stats" aria-label="Статистика"><span class="nav-icon" aria-hidden="true">📊</span><span class="nav-label nav-label-full">Статистика</span><span class="nav-label nav-label-short" aria-hidden="true">Стат.</span></button>
-      <button type="button" data-view="medications" aria-label="Лекарства"><span class="nav-icon" aria-hidden="true">💊</span><span class="nav-label">Лекарства</span></button>
-      <button type="button" data-view="directories" aria-label="Справочники"><span class="nav-icon" aria-hidden="true">📚</span><span class="nav-label nav-label-full">Справочники</span><span class="nav-label nav-label-short" aria-hidden="true">Справ.</span></button>
-    </nav>
+    <div class="bottom-chrome-anchor">
+      <nav class="bottom-nav" aria-label="Основные разделы">
+        <button class="active" type="button" data-view="diary" aria-current="page" aria-label="Дневник"><span class="nav-icon" aria-hidden="true">📝</span><span class="nav-label">Дневник</span></button>
+        <button type="button" data-view="stats" aria-label="Статистика"><span class="nav-icon" aria-hidden="true">📊</span><span class="nav-label nav-label-full">Статистика</span><span class="nav-label nav-label-short" aria-hidden="true">Стат.</span></button>
+        <button type="button" data-view="medications" aria-label="Лекарства"><span class="nav-icon" aria-hidden="true">💊</span><span class="nav-label">Лекарства</span></button>
+        <button type="button" data-view="directories" aria-label="Справочники"><span class="nav-icon" aria-hidden="true">📚</span><span class="nav-label nav-label-full">Справочники</span><span class="nav-label nav-label-short" aria-hidden="true">Справ.</span></button>
+      </nav>
+    </div>
   </div>
 
   <dialog id="entry-type-dialog" class="sheet compact-choice-sheet">

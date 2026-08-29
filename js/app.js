@@ -203,14 +203,30 @@ function syncVisualViewport() {
   document.documentElement.style.setProperty("--visual-viewport-bottom", `${bottomInset}px`);
 }
 
+function pageScrollContainer() {
+  return document.documentElement.dataset.interface === "modern" ? document.querySelector(".app-main") : document.scrollingElement;
+}
+
+function scrollPageToTop(behavior = "smooth") {
+  const scroller = pageScrollContainer();
+  if (scroller === document.scrollingElement) window.scrollTo({ top: 0, behavior });
+  else scroller?.scrollTo({ top: 0, behavior });
+}
+
 function syncModalState() {
   const hasOpenDialog = Boolean(document.querySelector("dialog[open]"));
   const root = document.documentElement;
+  const modern = root.dataset.interface === "modern";
+  const scroller = pageScrollContainer();
   for (const surface of [document.querySelector(".app-header"), document.querySelector(".app-main"), document.querySelector(".bottom-nav")]) if (surface) surface.inert = hasOpenDialog;
   if (hasOpenDialog && !root.classList.contains("modal-open")) {
-    modalScrollY = window.scrollY; root.classList.add("modal-open"); document.body.style.top = `-${modalScrollY}px`;
+    modalScrollY = modern ? scroller?.scrollTop || 0 : window.scrollY;
+    root.classList.add("modal-open");
+    if (!modern) document.body.style.top = `-${modalScrollY}px`;
   } else if (!hasOpenDialog && root.classList.contains("modal-open")) {
-    root.classList.remove("modal-open"); document.body.style.top = ""; window.scrollTo(0, modalScrollY);
+    root.classList.remove("modal-open");
+    if (modern) { if (scroller) scroller.scrollTop = modalScrollY; }
+    else { document.body.style.top = ""; window.scrollTo(0, modalScrollY); }
   }
 }
 
@@ -705,7 +721,7 @@ function directoryItems(kind) {
   return list;
 }
 
-function openDirectory(kind) { if (!DIRECTORY_META[kind]) return; state.activeDirectory = kind; renderDirectories(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+function openDirectory(kind) { if (!DIRECTORY_META[kind]) return; state.activeDirectory = kind; renderDirectories(); scrollPageToTop(); }
 
 function renderDirectories() {
   if (!elements.directoriesContent) return;
@@ -1003,7 +1019,7 @@ function switchView(view) {
   if (view === "backup") document.querySelector("#data-error").textContent = "";
   if (view === "directories") { state.activeDirectory = null; renderDirectories(); }
   if (view === "medications") { state.medicationTab = "today"; state.medicationDate = getMoscowFields().date; renderMedications(); }
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  scrollPageToTop();
 }
 
 async function handleImportFile(event) {
@@ -1110,11 +1126,11 @@ function bindEvents() {
   document.querySelector("#headache-ongoing").addEventListener("change", () => syncHeadacheEndFields(true)); document.querySelector("#headache-variable-intensity").addEventListener("change", () => syncVariableIntensity(true)); document.querySelector("#medication").addEventListener("change", syncMedicationDateTime);
   document.querySelector("#body-part").addEventListener("change", () => { document.querySelector("#headache-error").textContent = ""; checkOngoingPain(); });
   document.querySelector("#add-body-part").addEventListener("click", () => openDirectoryItemForm("bodyParts", null, true)); document.querySelector("#add-medication").addEventListener("click", () => openDirectoryItemForm("medications", null, true)); document.querySelector("#directory-item-form").addEventListener("submit", saveDirectoryItemForm);
-  elements.directoriesBack.addEventListener("click", () => { state.activeDirectory = null; renderDirectories(); window.scrollTo({ top: 0, behavior: "smooth" }); });
+  elements.directoriesBack.addEventListener("click", () => { state.activeDirectory = null; renderDirectories(); scrollPageToTop(); });
   elements.directoryAdd.addEventListener("click", () => { if (state.activeDirectory) openDirectoryItemForm(state.activeDirectory); });
   for (const input of document.querySelectorAll("#intensity, #intensity-min, #intensity-max")) { input.addEventListener("input", (event) => updateIntensityDisplay(event.currentTarget)); input.addEventListener("change", (event) => snapIntensity(event.currentTarget)); input.addEventListener("keydown", handleIntensityKeydown); } document.querySelector("#pressure-form").addEventListener("input", () => { state.pressureWarningAccepted = false; document.querySelector("#pressure-warning").hidden = true; });
   bindMeasurementConstraints(); elements.diaryList.addEventListener("click", handleDiaryAction);
-  elements.statsContent.addEventListener("click", (event) => { const card = event.target.closest("[data-metric]"); if (!card) return; state.statsMetric = card.dataset.metric; renderStatistics(); window.scrollTo({ top: 0, behavior: "smooth" }); });
+  elements.statsContent.addEventListener("click", (event) => { const card = event.target.closest("[data-metric]"); if (!card) return; state.statsMetric = card.dataset.metric; renderStatistics(); scrollPageToTop(); });
   elements.statsBack.addEventListener("click", () => { state.statsMetric = "overview"; renderStatistics(); }); elements.statsPeriod.addEventListener("change", () => { elements.customPeriod.hidden = elements.statsPeriod.value !== "custom"; renderStatistics(); }); elements.periodStart.addEventListener("change", renderStatistics); elements.periodEnd.addEventListener("change", renderStatistics);
   elements.statsSubfilters.addEventListener("change", (event) => { if (event.target.id === "glucose-context-filter") state.glucoseContext = event.target.value; if (event.target.id === "glucose-format-filter") state.glucoseFormat = event.target.value; if (event.target.id === "pain-body-part-filter") state.painBodyPart = event.target.value; renderStatistics(); });
   document.querySelector("#export-csv").addEventListener("click", async () => { try { if (await exportCsv(state.data)) showToast("CSV подготовлены"); } catch (error) { showError(document.querySelector("#data-error"), error); } });

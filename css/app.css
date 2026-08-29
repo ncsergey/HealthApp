@@ -57,14 +57,14 @@ html[data-theme="dark"] { color-scheme: dark; }
 * { box-sizing: border-box; }
 html { min-height: 100%; background: var(--bg); }
 body { min-height: 100dvh; margin: 0; overflow-x: hidden; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
-html.modal-open, html.modal-open body { overflow: hidden; overscroll-behavior: none; }
-html.modal-open body { position: fixed; right: 0; left: 0; width: 100%; }
+html.modal-open:not([data-interface="modern"]), html.modal-open:not([data-interface="modern"]) body { overflow: hidden; overscroll-behavior: none; }
+html.modal-open:not([data-interface="modern"]) body { position: fixed; right: 0; left: 0; width: 100%; }
 button, input, textarea, select { font: inherit; }
 button, label.file-action { -webkit-tap-highlight-color: transparent; }
 button { color: inherit; }
 button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, label.file-action:focus-within { outline: 3px solid color-mix(in srgb, var(--primary) 38%, transparent); outline-offset: -3px; }
 [hidden] { display: none !important; }
-.top-chrome-anchor, .bottom-chrome-anchor { display: contents; }
+.app-shell, .top-chrome-anchor, .bottom-chrome-anchor { display: contents; }
 
 .app-header {
   position: sticky; top: 0; z-index: 20;
@@ -690,6 +690,10 @@ html[data-interface="modern"] {
   background: #dfeff0;
 }
 html[data-interface="modern"] body {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
   background:
     radial-gradient(circle at 8% 4%, rgba(107, 203, 211, .38), transparent 34rem),
     radial-gradient(circle at 94% 28%, rgba(129, 168, 242, .28), transparent 31rem),
@@ -697,9 +701,20 @@ html[data-interface="modern"] body {
     var(--bg);
   background-attachment: fixed;
 }
+html[data-interface="modern"] {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+html[data-interface="modern"] .app-shell {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+}
 html[data-interface="modern"] .top-chrome-anchor,
 html[data-interface="modern"] .bottom-chrome-anchor {
-  position: fixed;
+  position: absolute;
   right: 0;
   left: 0;
   display: flex;
@@ -749,9 +764,18 @@ html[data-interface="modern"] .back-button {
   -webkit-backdrop-filter: blur(calc(20px * var(--glass-blur-scale))) saturate(140%);
 }
 html[data-interface="modern"] .app-main {
+  position: absolute;
+  inset: 0;
+  height: auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
   padding-top: calc(var(--floating-chrome-gap) + var(--safe-top) + var(--floating-chrome-height) + 18px);
   padding-bottom: calc(var(--floating-chrome-gap) + var(--safe-bottom) + var(--floating-chrome-height) + 49px);
 }
+html[data-interface="modern"].modal-open .app-main { overflow-y: hidden; overscroll-behavior: none; }
 html[data-interface="modern"] .day-label { top: calc(var(--floating-chrome-gap) + var(--safe-top) + var(--floating-chrome-height) + 12px); }
 html[data-interface="modern"] .bottom-nav {
   position: relative;
