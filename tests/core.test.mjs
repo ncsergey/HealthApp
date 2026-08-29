@@ -683,10 +683,38 @@ test("содержимое формы прокручивается между ш
 
 test("современные формы используют плавающие шапку и подвал без второго скролла", () => {
   const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
-  assert.match(css, /html\[data-interface="modern"\] \.entry-form-dialog \{[^}]+--entry-dialog-chrome-gap: 10px[^}]+overflow: hidden/);
-  assert.match(css, /html\[data-interface="modern"\] \.entry-form-dialog > form \{ gap: var\(--entry-dialog-chrome-gap\); \}/);
-  assert.match(css, /html\[data-interface="modern"\] \.entry-form-dialog \.dialog-header,\s*html\[data-interface="modern"\] \.entry-form-dialog \.dialog-actions \{[^}]+position: relative[^}]+border-radius: 20px[^}]+backdrop-filter:/);
-  assert.match(css, /html\[data-interface="modern"\] \.entry-form-dialog \.entry-form-content \{ padding: 4px 6px; \}/);
+  assert.match(css, /html\[data-interface="modern"\] :is\(\.entry-form-dialog, \.fixed-header-dialog, \.fixed-footer-dialog\) \{[^}]+--entry-dialog-chrome-gap: 10px[^}]+overflow: hidden/);
+  assert.match(css, /html\[data-interface="modern"\] :is\(\.entry-form-dialog, \.fixed-header-dialog, \.fixed-footer-dialog\) > :is\(form, \.dialog-layout\) \{ gap: var\(--entry-dialog-chrome-gap\); \}/);
+  assert.match(css, /html\[data-interface="modern"\] :is\(\.entry-form-dialog, \.fixed-header-dialog\) \.dialog-header,\s*html\[data-interface="modern"\] :is\(\.entry-form-dialog, \.fixed-footer-dialog\) \.dialog-actions \{[^}]+position: relative[^}]+border-radius: 20px[^}]+backdrop-filter:/);
+  assert.match(css, /html\[data-interface="modern"\] :is\(\.entry-form-dialog, \.fixed-header-dialog, \.fixed-footer-dialog\) :is\(\.entry-form-content, \.dialog-scroll-content\) \{ padding: 4px 6px; \}/);
+});
+
+test("оставшиеся диалоги распределены по схемам фиксированных панелей", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const dialog = (id) => {
+    const start = html.indexOf(`<dialog id="${id}"`);
+    const end = html.indexOf("</dialog>", start);
+    assert.ok(start >= 0 && end > start);
+    return html.slice(start, end);
+  };
+  for (const id of ["directory-item-dialog", "medication-course-dialog"]) {
+    const markup = dialog(id);
+    assert.match(markup, /class="[^"]*entry-form-dialog[^"]*"/);
+    assert.match(markup, /class="dialog-header"[\s\S]+class="entry-form-content"[\s\S]+class="dialog-actions"/);
+  }
+  const importDialog = dialog("import-dialog");
+  assert.match(importDialog, /class="sheet entry-form-dialog"/);
+  assert.match(importDialog, /class="dialog-header"[\s\S]+class="entry-form-content"[\s\S]+class="dialog-actions import-dialog-actions"/);
+  const entryTypeDialog = dialog("entry-type-dialog");
+  assert.match(entryTypeDialog, /class="sheet compact-choice-sheet fixed-header-dialog"/);
+  assert.match(entryTypeDialog, /class="dialog-header"[\s\S]+class="dialog-scroll-content"/);
+  assert.doesNotMatch(entryTypeDialog, /class="dialog-actions"/);
+  for (const id of ["confirm-dialog", "backup-prompt-dialog"]) {
+    const markup = dialog(id);
+    assert.match(markup, /class="[^"]*fixed-footer-dialog[^"]*"/);
+    assert.match(markup, /class="dialog-scroll-content"[\s\S]+class="dialog-actions"/);
+    assert.doesNotMatch(markup, /class="dialog-header"/);
+  }
 });
 
 test("форма аккаунта использует общий каркас с фиксированными шапкой и подвалом", () => {

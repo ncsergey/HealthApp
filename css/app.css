@@ -193,17 +193,40 @@ dialog[open] { overscroll-behavior: contain; }
 dialog::backdrop { background: rgba(8, 17, 15, .48); backdrop-filter: blur(3px); }
 dialog.sheet { margin: auto auto calc(10px + var(--safe-bottom)); }
 dialog.form-sheet { overflow-y: auto; }
+.entry-form-dialog, .fixed-header-dialog, .fixed-footer-dialog { overflow: hidden; }
 .entry-form-dialog { --entry-dialog-padding: 22px; height: fit-content; min-height: 451px; }
 .entry-form-dialog > form {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-height: calc(449px - var(--entry-dialog-padding) - var(--entry-dialog-padding));
 }
+.entry-form-dialog > .dialog-layout {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: calc(449px - var(--entry-dialog-padding) - var(--entry-dialog-padding));
+}
+.fixed-header-dialog > .dialog-layout,
+.fixed-footer-dialog > .dialog-layout {
+  display: grid;
+  min-height: 0;
+  max-height: calc(100dvh - 68px - var(--safe-top) - var(--safe-bottom));
+}
+.fixed-header-dialog > .dialog-layout { grid-template-rows: auto minmax(0, 1fr); }
+.fixed-footer-dialog > .dialog-layout { grid-template-rows: minmax(0, 1fr) auto; }
 .entry-form-dialog .dialog-header, .entry-form-dialog .dialog-actions { flex: 0 0 auto; }
 .entry-form-dialog .dialog-header { margin-bottom: 18px; }
 .entry-form-dialog .dialog-actions { margin-top: 0; padding-top: 18px; }
 .entry-form-dialog .field { margin-bottom: 11px; }
 .entry-form-content { flex: 0 0 auto; min-height: 0; }
+.dialog-scroll-content {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-inline: 2px;
+  scroll-padding-block: 16px;
+  -webkit-overflow-scrolling: touch;
+}
 #headache-dialog fieldset { margin-bottom: 6px; }
 #headache-dialog #headache-end-fields { margin-bottom: 11px; }
 #headache-dialog legend { margin-bottom: 6px; }
@@ -250,6 +273,7 @@ dialog.form-sheet { overflow-y: auto; }
 .import-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
 .import-summary div { padding: 14px; border-radius: 14px; background: var(--surface-2); }
 .import-summary strong { display: block; font-size: 25px; }
+.import-dialog-actions { grid-template-columns: 1fr; }
 .confirm-dialog { max-width: 390px; }
 .backup-prompt-dialog p { line-height: 1.5; }
 .backup-prompt-dialog .muted { margin-bottom: 8px; font-size: 13px; }
@@ -428,7 +452,8 @@ html[data-theme="dark"] .toast { background: #eef5f2; color: #172320; }
 .glucose-reference-help { margin: -5px 0 12px; }
 .import-summary .wide { grid-column: 1 / -1; }
 
-.entry-form-dialog > form { max-height: calc(100dvh - 50px - var(--safe-top) - var(--safe-bottom)); }
+.entry-form-dialog > form,
+.entry-form-dialog > .dialog-layout { max-height: calc(100dvh - 50px - var(--safe-top) - var(--safe-bottom)); }
 .entry-form-dialog .entry-form-content {
   min-height: 0;
   overflow-x: hidden;
@@ -507,7 +532,8 @@ html[data-theme="dark"] .toast { background: #eef5f2; color: #172320; }
     border-radius: 24px;
   }
 
-  .entry-form-dialog > form {
+  .entry-form-dialog > form,
+  .entry-form-dialog > .dialog-layout {
     width: 100%;
     height: 100%;
     min-height: 0;
@@ -861,16 +887,16 @@ html[data-interface="modern"] .add-directory-button {
 }
 html[data-interface="modern"] dialog { border-color: rgba(255,255,255,.7); background: color-mix(in srgb, var(--surface) var(--glass-raised-opacity), transparent); box-shadow: 0 28px 70px rgba(12,42,47,.3), inset 0 1px rgba(255,255,255,.85); backdrop-filter: blur(calc(30px * var(--glass-blur-scale))) saturate(150%); -webkit-backdrop-filter: blur(calc(30px * var(--glass-blur-scale))) saturate(150%); }
 html[data-interface="modern"] dialog::backdrop { background: rgba(18,38,42,.28); backdrop-filter: blur(calc(5px * var(--glass-blur-scale))); -webkit-backdrop-filter: blur(calc(5px * var(--glass-blur-scale))); }
-html[data-interface="modern"] .entry-form-dialog {
+html[data-interface="modern"] :is(.entry-form-dialog, .fixed-header-dialog, .fixed-footer-dialog) {
   --entry-dialog-padding: 10px;
   --entry-dialog-chrome-gap: 10px;
   padding: var(--entry-dialog-chrome-gap) calc(var(--entry-dialog-chrome-gap) + var(--safe-right)) calc(var(--entry-dialog-chrome-gap) + var(--safe-bottom)) calc(var(--entry-dialog-chrome-gap) + var(--safe-left));
   overflow: hidden;
   background: color-mix(in srgb, var(--surface-2) var(--glass-subtle-opacity), transparent);
 }
-html[data-interface="modern"] .entry-form-dialog > form { gap: var(--entry-dialog-chrome-gap); }
-html[data-interface="modern"] .entry-form-dialog .dialog-header,
-html[data-interface="modern"] .entry-form-dialog .dialog-actions {
+html[data-interface="modern"] :is(.entry-form-dialog, .fixed-header-dialog, .fixed-footer-dialog) > :is(form, .dialog-layout) { gap: var(--entry-dialog-chrome-gap); }
+html[data-interface="modern"] :is(.entry-form-dialog, .fixed-header-dialog) .dialog-header,
+html[data-interface="modern"] :is(.entry-form-dialog, .fixed-footer-dialog) .dialog-actions {
   position: relative;
   bottom: auto;
   z-index: 1;
@@ -884,10 +910,10 @@ html[data-interface="modern"] .entry-form-dialog .dialog-actions {
   backdrop-filter: blur(calc(22px * var(--glass-blur-scale))) saturate(150%);
   -webkit-backdrop-filter: blur(calc(22px * var(--glass-blur-scale))) saturate(150%);
 }
-html[data-interface="modern"] .entry-form-dialog .dialog-actions { padding: 12px; }
-html[data-interface="modern"] .entry-form-dialog .entry-form-content { padding: 4px 6px; }
-html[data-interface="modern"] .entry-form-dialog .dialog-header::before,
-html[data-interface="modern"] .entry-form-dialog .dialog-actions::before { content: ""; position: absolute; inset: 0 12% auto; height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.9), transparent); pointer-events: none; }
+html[data-interface="modern"] :is(.entry-form-dialog, .fixed-footer-dialog) .dialog-actions { padding: 12px; }
+html[data-interface="modern"] :is(.entry-form-dialog, .fixed-header-dialog, .fixed-footer-dialog) :is(.entry-form-content, .dialog-scroll-content) { padding: 4px 6px; }
+html[data-interface="modern"] :is(.entry-form-dialog, .fixed-header-dialog) .dialog-header::before,
+html[data-interface="modern"] :is(.entry-form-dialog, .fixed-footer-dialog) .dialog-actions::before { content: ""; position: absolute; inset: 0 12% auto; height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.9), transparent); pointer-events: none; }
 html[data-interface="modern"] .day-label { background: color-mix(in srgb, var(--surface) var(--glass-raised-opacity), transparent); border-color: rgba(255,255,255,.62); box-shadow: 0 5px 15px rgba(28,67,72,.08); backdrop-filter: blur(calc(10px * var(--glass-blur-scale))); -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale))); }
 html[data-interface="modern"] .filter-scroll::after { background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--bg) 85%, transparent)); }
 html[data-interface="modern"] .settings-icon,
@@ -901,8 +927,8 @@ html[data-interface="modern"] .glass-effects-option.selected { border-color: var
   html[data-interface="modern"] .app-header,
   html[data-interface="modern"] .bottom-nav,
   html[data-interface="modern"] dialog,
-  html[data-interface="modern"] .entry-form-dialog .dialog-header,
-  html[data-interface="modern"] .entry-form-dialog .dialog-actions,
+  html[data-interface="modern"] :is(.entry-form-dialog, .fixed-header-dialog) .dialog-header,
+  html[data-interface="modern"] :is(.entry-form-dialog, .fixed-footer-dialog) .dialog-actions,
   html[data-interface="modern"] .entry-card,
   html[data-interface="modern"] .course-card,
   html[data-interface="modern"] .overview-card,
@@ -1152,7 +1178,7 @@ html .unified-range-control > input[type="range"] {
     max-height: calc(100dvh - 12px - var(--safe-top) - var(--safe-bottom));
     overflow: hidden;
   }
-  .entry-form-dialog > form { height: 100%; min-height: 0; max-height: none; }
+  .entry-form-dialog > form, .entry-form-dialog > .dialog-layout { height: 100%; min-height: 0; max-height: none; }
   .entry-form-dialog .dialog-header { margin-bottom: 10px; }
   .entry-form-dialog .dialog-actions { margin-top: 0; padding-top: 10px; }
   .dialog-header { margin-bottom: 14px; }
@@ -1219,8 +1245,8 @@ html .unified-range-control > input[type="range"] {
   html[data-interface="modern"] .add-button,
   html[data-interface="modern"] .profile-edit-fab { right: max(18px, calc((100vw - 820px) / 2 + 18px), var(--safe-right)); bottom: calc(96px + var(--safe-bottom)); }
   html[data-interface="modern"] .toast { bottom: calc(var(--floating-chrome-gap) + var(--safe-bottom) + var(--floating-chrome-height) + 12px); }
-  html[data-interface="modern"] .entry-form-dialog { --entry-dialog-chrome-gap: 6px; }
-  html[data-interface="modern"] .entry-form-dialog .dialog-header { padding: 8px 12px; border-radius: 16px; }
-  html[data-interface="modern"] .entry-form-dialog .dialog-actions { padding: 8px; border-radius: 16px; }
-  html[data-interface="modern"] .entry-form-dialog .entry-form-content { padding: 2px 6px; }
+  html[data-interface="modern"] :is(.entry-form-dialog, .fixed-header-dialog, .fixed-footer-dialog) { --entry-dialog-chrome-gap: 6px; }
+  html[data-interface="modern"] :is(.entry-form-dialog, .fixed-header-dialog) .dialog-header { padding: 8px 12px; border-radius: 16px; }
+  html[data-interface="modern"] :is(.entry-form-dialog, .fixed-footer-dialog) .dialog-actions { padding: 8px; border-radius: 16px; }
+  html[data-interface="modern"] :is(.entry-form-dialog, .fixed-header-dialog, .fixed-footer-dialog) :is(.entry-form-content, .dialog-scroll-content) { padding: 2px 6px; }
 }
