@@ -613,6 +613,7 @@ test("в современном интерфейсе шапка и нижнее 
   assert.match(css, /--floating-chrome-gap: 12px/);
   assert.match(css, /--floating-chrome-height: 71px/);
   assert.match(html, /<div class="app-shell">\s+<div class="top-chrome-anchor">\s+<header class="app-header">/);
+  assert.match(html, /<main id="app" class="app-main">\s+<div class="app-content">/);
   assert.match(html, /<div class="bottom-chrome-anchor">\s+<nav class="bottom-nav"[\s\S]+<\/nav>\s+<\/div>\s+<\/div>\s+<dialog/);
   assert.match(css, /\.app-shell, \.top-chrome-anchor, \.bottom-chrome-anchor \{ display: contents; \}/);
   assert.match(css, /--shell-safe-top: var\(--safe-top\)/);
@@ -622,7 +623,8 @@ test("в современном интерфейсе шапка и нижнее 
   assert.match(css, /html\[data-interface="modern"\] \.bottom-chrome-anchor \{[\s\S]+align-self: end[\s\S]+padding-bottom: var\(--floating-chrome-gap\)/);
   assert.match(css, /html\[data-interface="modern"\] \.app-header \{[\s\S]+position: relative[\s\S]+width: min\(100%, 680px\)[\s\S]+height: var\(--floating-chrome-height\)[\s\S]+transform: none[\s\S]+pointer-events: auto/);
   assert.match(css, /html\[data-interface="modern"\] \.bottom-nav \{[\s\S]+position: relative[\s\S]+bottom: auto[\s\S]+width: min\(100%, 680px\)[\s\S]+height: var\(--floating-chrome-height\)[\s\S]+transform: none[\s\S]+pointer-events: auto/);
-  assert.match(css, /html\[data-interface="modern"\] \.app-main \{[\s\S]+padding-top: calc\(var\(--floating-chrome-gap\) \+ var\(--floating-chrome-height\) \+ 18px\)[\s\S]+padding-bottom: calc\(var\(--floating-chrome-gap\) \+ var\(--floating-chrome-height\) \+ 49px\)/);
+  assert.match(css, /html\[data-interface="modern"\] \.app-main \{[\s\S]+padding: 0/);
+  assert.match(css, /html\[data-interface="modern"\] \.app-content \{[\s\S]+min-height: 100%[\s\S]+padding: calc\(var\(--floating-chrome-gap\) \+ var\(--floating-chrome-height\) \+ 18px\) max\(18px, var\(--safe-right\)\) calc\(var\(--floating-chrome-gap\) \+ var\(--floating-chrome-height\) \+ 49px\) max\(18px, var\(--safe-left\)\)/);
   assert.match(css, /@media \(orientation: landscape\) and \(max-height: 500px\) \{[\s\S]+html\[data-interface="modern"\] body \{ padding-left: 0; \}[\s\S]+html\[data-interface="modern"\] \.bottom-nav \{[\s\S]+top: auto[\s\S]+bottom: auto[\s\S]+width: min\(100%, 680px\)[\s\S]+height: var\(--floating-chrome-height\)[\s\S]+grid-template: 1fr \/ repeat\(4, minmax\(0, 1fr\)\)[\s\S]+transform: none/);
   assert.doesNotMatch(css, /html\[data-interface="modern"\] \.bottom-nav \{[\s\S]{0,300}width: 78px/);
 });
@@ -645,11 +647,19 @@ test("современный интерфейс прокручивает тол�
   assert.match(css, /html\[data-interface="modern"\] body \{[\s\S]+height: 100%[\s\S]+overflow: hidden[\s\S]+overscroll-behavior: none/);
   assert.match(css, /html\[data-interface="modern"\] \{[\s\S]+height: 100%[\s\S]+overflow: hidden[\s\S]+overscroll-behavior: none/);
   assert.match(css, /html\[data-interface="modern"\] \.app-main \{[\s\S]+position: relative[\s\S]+inset: auto[\s\S]+grid-area: 1 \/ 1[\s\S]+align-self: stretch[\s\S]+overflow-x: hidden[\s\S]+overflow-y: auto[\s\S]+overscroll-behavior-y: contain[\s\S]+-webkit-overflow-scrolling: touch/);
+  assert.match(css, /html\[data-interface="modern"\] \.app-main \{[\s\S]+-webkit-overflow-scrolling: touch;[\s\S]+padding: 0/);
   assert.match(css, /html\[data-interface="modern"\]\.modal-open \.app-main \{ overflow-y: hidden; overscroll-behavior: none; \}/);
   assert.doesNotMatch(css, /html\[data-interface="modern"\] \.top-chrome-anchor,[\s\S]{0,500}position: fixed/);
   assert.match(app, /function pageScrollContainer\(\)[\s\S]+dataset\.interface === "modern"[\s\S]+querySelector\("\.app-main"\)[\s\S]+document\.scrollingElement/);
   assert.match(app, /function scrollPageToTop\(behavior = "smooth"\)[\s\S]+pageScrollContainer\(\)[\s\S]+scroller\?\.scrollTo/);
   assert.match(app, /modalScrollY = modern \? scroller\?\.scrollTop \|\| 0 : window\.scrollY/);
+});
+
+test("плавающая дата не учитывает высоту заголовка дважды", () => {
+  const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
+  assert.match(css, /html\[data-interface="modern"\] \.app-content \{[\s\S]+padding: calc\(var\(--floating-chrome-gap\) \+ var\(--floating-chrome-height\) \+ 18px\)/);
+  assert.match(css, /html\[data-interface="modern"\] \.day-label \{ top: calc\(var\(--floating-chrome-gap\) \+ var\(--floating-chrome-height\) \+ 12px\); \}/);
+  assert.doesNotMatch(css, /html\[data-interface="modern"\] \.app-main \{[^}]*padding-(?:top|bottom):/);
 });
 
 test("в современном интерфейсе дневниковые фильтры занимают всю ширину в альбомной ориентации", () => {

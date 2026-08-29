@@ -66,6 +66,7 @@ button { color: inherit; }
 button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, label.file-action:focus-within { outline: 3px solid color-mix(in srgb, var(--primary) 38%, transparent); outline-offset: -3px; }
 [hidden] { display: none !important; }
 .app-shell, .top-chrome-anchor, .bottom-chrome-anchor { display: contents; }
+.app-content { min-width: 0; }
 
 .app-header {
   position: sticky; top: 0; z-index: 20;
@@ -777,8 +778,11 @@ html[data-interface="modern"] .app-main {
   overflow-y: auto;
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
-  padding-top: calc(var(--floating-chrome-gap) + var(--floating-chrome-height) + 18px);
-  padding-bottom: calc(var(--floating-chrome-gap) + var(--floating-chrome-height) + 49px);
+  padding: 0;
+}
+html[data-interface="modern"] .app-content {
+  min-height: 100%;
+  padding: calc(var(--floating-chrome-gap) + var(--floating-chrome-height) + 18px) max(18px, var(--safe-right)) calc(var(--floating-chrome-gap) + var(--floating-chrome-height) + 49px) max(18px, var(--safe-left));
 }
 html[data-interface="modern"].modal-open .app-main { overflow-y: hidden; overscroll-behavior: none; }
 html[data-interface="modern"] .day-label { top: calc(var(--floating-chrome-gap) + var(--floating-chrome-height) + 12px); }
@@ -1034,7 +1038,7 @@ html .unified-range-control > input[type="range"] {
 }
 
 @media (max-height: 430px) and (orientation: landscape) {
-  html[data-interface="modern"] .app-main { padding-bottom: 112px; }
+  html[data-interface="modern"] .app-content { padding-bottom: 112px; }
   html[data-interface="modern"] .bottom-nav { padding-block: 4px; border-radius: 22px; }
   html[data-interface="modern"] .bottom-nav button { height: 49px; min-height: 49px; }
   html[data-interface="modern"] .add-button, html[data-interface="modern"] .profile-edit-fab { bottom: calc(77px + var(--safe-bottom)); }
@@ -1127,6 +1131,7 @@ html .unified-range-control > input[type="range"] {
     padding-left: max(24px, calc((100vw - 1120px) / 2));
   }
   .app-main { width: min(100%, 1120px); padding-inline: 24px; }
+  html[data-interface="modern"] .app-content { padding-right: 24px; padding-left: 24px; }
   .timeline, .overview-grid, .course-list, .medication-history, .directory-picker-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1153,6 +1158,8 @@ html .unified-range-control > input[type="range"] {
   html[data-interface="modern"] body { padding-left: 0; }
   html[data-interface="modern"] .app-main {
     width: min(100%, 820px);
+  }
+  html[data-interface="modern"] .app-content {
     padding-right: max(18px, var(--safe-right));
     padding-bottom: calc(var(--floating-chrome-gap) + var(--floating-chrome-height) + 28px);
     padding-left: max(18px, var(--safe-left));
