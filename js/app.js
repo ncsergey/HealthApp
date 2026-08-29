@@ -23,7 +23,7 @@ const DIRECTORY_META = Object.freeze({ bodyParts: { title: "Части тела"
 let backupPendingFallback = false;
 let backupReminderDismissedFallback = false;
 let modalScrollY = 0;
-let headerSafeTopSyncTimers = [];
+let chromeSafeInsetSyncTimers = [];
 let viewportOrientation = window.innerWidth > window.innerHeight ? "landscape" : "portrait";
 
 const initialUiSettings = (() => {
@@ -205,32 +205,39 @@ function syncVisualViewport() {
   document.documentElement.style.setProperty("--visual-viewport-bottom", `${bottomInset}px`);
 }
 
-function measureSafeAreaTop() {
+function measureSafeAreaInset(side) {
   const probe = document.createElement("div");
   probe.setAttribute("aria-hidden", "true");
-  probe.style.cssText = "position:fixed;top:env(safe-area-inset-top,0px);left:0;width:0;height:0;visibility:hidden;pointer-events:none";
+  probe.style.cssText = `position:fixed;${side}:env(safe-area-inset-${side},0px);left:0;width:0;height:0;visibility:hidden;pointer-events:none`;
   document.documentElement.append(probe);
-  const value = Number.parseFloat(getComputedStyle(probe).top);
+  const value = Number.parseFloat(getComputedStyle(probe)[side]);
   probe.remove();
   return Number.isFinite(value) ? Math.max(0, value) : 0;
 }
 
-function syncHeaderSafeTop() {
-  const viewportOffsetTop = Math.max(0, window.visualViewport?.offsetTop || 0);
-  const safeTop = Math.max(measureSafeAreaTop(), viewportOffsetTop);
-  document.documentElement.style.setProperty("--header-safe-top", `${Math.round(safeTop * 100) / 100}px`);
+function syncChromeSafeInsets() {
+  const viewport = window.visualViewport;
+  const viewportOffsetTop = Math.max(0, viewport?.offsetTop || 0);
+  const layoutHeight = Math.max(document.documentElement.clientHeight, window.innerHeight);
+  const keyboardLikelyOpen = Boolean(viewport && viewport.height < layoutHeight * .7);
+  const viewportBottomInset = keyboardLikelyOpen || !viewport ? 0 : Math.max(0, layoutHeight - viewport.height - viewport.offsetTop);
+  const safeTop = Math.max(measureSafeAreaInset("top"), viewportOffsetTop);
+  const safeBottom = Math.max(measureSafeAreaInset("bottom"), viewportBottomInset);
+  const root = document.documentElement;
+  root.style.setProperty("--chrome-safe-top", `${Math.round(safeTop * 100) / 100}px`);
+  root.style.setProperty("--chrome-safe-bottom", `${Math.round(safeBottom * 100) / 100}px`);
 }
 
-function scheduleHeaderSafeTopSync() {
-  for (const timer of headerSafeTopSyncTimers) clearTimeout(timer);
-  headerSafeTopSyncTimers = [0, 60, 180, 360, 720].map((delay) => setTimeout(syncHeaderSafeTop, delay));
+function scheduleChromeSafeInsetSync() {
+  for (const timer of chromeSafeInsetSyncTimers) clearTimeout(timer);
+  chromeSafeInsetSyncTimers = [0, 60, 180, 360, 720].map((delay) => setTimeout(syncChromeSafeInsets, delay));
 }
 
 function handleViewportOrientationChange() {
   const nextOrientation = window.innerWidth > window.innerHeight ? "landscape" : "portrait";
-  if (nextOrientation === viewportOrientation) { syncHeaderSafeTop(); return; }
+  if (nextOrientation === viewportOrientation) return;
   viewportOrientation = nextOrientation;
-  scheduleHeaderSafeTopSync();
+  scheduleChromeSafeInsetSync();
 }
 
 function syncModalState() {
@@ -1093,7 +1100,7 @@ function chooseHeadacheEntry() {
 
 function bindEvents() {
   syncVisualViewport();
-  syncHeaderSafeTop();
+  syncChromeSafeInsets();
   document.querySelectorAll('[role="radiogroup"]').forEach((group) => group.addEventListener("keydown", (event) => {
     const current = event.target.closest('[role="radio"]');
     if (!current || !group.contains(current) || !["ArrowDown", "ArrowRight", "ArrowUp", "ArrowLeft", "Home", "End"].includes(event.key)) return;
@@ -1107,11 +1114,11 @@ function bindEvents() {
     if (event.target instanceof Element && event.target.closest("dialog.entry-form-dialog")) setTimeout(ensureFocusedEntryFieldVisible, 220);
   });
   if (window.visualViewport) {
-    const handleVisualViewportChange = debounce(() => { syncVisualViewport(); syncHeaderSafeTop(); ensureFocusedEntryFieldVisible(); }, 80);
+    const handleVisualViewportChange = debounce(() => { syncVisualViewport(); ensureFocusedEntryFieldVisible(); }, 80);
     window.visualViewport.addEventListener("resize", handleVisualViewportChange);
     window.visualViewport.addEventListener("scroll", handleVisualViewportChange);
   }
-  window.addEventListener("orientationchange", scheduleHeaderSafeTopSync);
+  window.addEventListener("orientationchange", scheduleChromeSafeInsetSync);
   window.addEventListener("resize", debounce(handleViewportOrientationChange, 80));
   document.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => closeDialog(button.closest("dialog")))); document.querySelectorAll("dialog").forEach((dialog) => dialog.addEventListener("close", () => queueMicrotask(syncModalState)));
   document.querySelectorAll("dialog.sheet").forEach((dialog) => dialog.addEventListener("click", (event) => { if (event.target === dialog) closeDialog(dialog); }));

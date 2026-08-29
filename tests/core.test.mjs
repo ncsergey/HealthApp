@@ -612,21 +612,24 @@ test("в современном интерфейсе шапка и нижнее 
   assert.match(css, /--floating-chrome-gap: 12px/);
   assert.match(css, /--floating-chrome-height: 71px/);
   assert.match(css, /--floating-chrome-width: min\(calc\(100% - 24px - var\(--safe-left\) - var\(--safe-right\)\), 680px\)/);
-  assert.match(css, /--header-safe-top: var\(--safe-top\)/);
-  assert.match(css, /html\[data-interface="modern"\] \.app-header \{[\s\S]+position: fixed[\s\S]+top: calc\(var\(--floating-chrome-gap\) \+ var\(--header-safe-top\)\)[\s\S]+left: 50%[\s\S]+width: var\(--floating-chrome-width\)[\s\S]+height: var\(--floating-chrome-height\)[\s\S]+transform: translateX\(-50%\)/);
-  assert.match(css, /html\[data-interface="modern"\] \.bottom-nav \{[\s\S]+bottom: calc\(var\(--floating-chrome-gap\) \+ var\(--safe-bottom\)\)[\s\S]+left: 50%[\s\S]+width: var\(--floating-chrome-width\)[\s\S]+height: var\(--floating-chrome-height\)/);
-  assert.match(css, /html\[data-interface="modern"\] \.app-main \{[\s\S]+padding-top: calc\(var\(--floating-chrome-gap\) \+ var\(--header-safe-top\) \+ var\(--floating-chrome-height\) \+ 18px\)/);
-  assert.match(css, /@media \(orientation: landscape\) and \(max-height: 500px\) \{[\s\S]+html\[data-interface="modern"\] body \{ padding-left: 0; \}[\s\S]+html\[data-interface="modern"\] \.bottom-nav \{[\s\S]+top: auto[\s\S]+bottom: calc\(var\(--floating-chrome-gap\) \+ var\(--safe-bottom\)\)[\s\S]+width: var\(--floating-chrome-width\)[\s\S]+height: var\(--floating-chrome-height\)[\s\S]+grid-template: 1fr \/ repeat\(4, minmax\(0, 1fr\)\)[\s\S]+transform: translateX\(-50%\)/);
+  assert.match(css, /--chrome-safe-top: var\(--safe-top\)/);
+  assert.match(css, /--chrome-safe-bottom: var\(--safe-bottom\)/);
+  assert.match(css, /html\[data-interface="modern"\] \.app-header \{[\s\S]+position: fixed[\s\S]+top: calc\(var\(--floating-chrome-gap\) \+ var\(--chrome-safe-top\)\)[\s\S]+left: 50%[\s\S]+width: var\(--floating-chrome-width\)[\s\S]+height: var\(--floating-chrome-height\)[\s\S]+transform: translateX\(-50%\)/);
+  assert.match(css, /html\[data-interface="modern"\] \.bottom-nav \{[\s\S]+bottom: calc\(var\(--floating-chrome-gap\) \+ var\(--chrome-safe-bottom\)\)[\s\S]+left: 50%[\s\S]+width: var\(--floating-chrome-width\)[\s\S]+height: var\(--floating-chrome-height\)/);
+  assert.match(css, /html\[data-interface="modern"\] \.app-main \{[\s\S]+padding-top: calc\(var\(--floating-chrome-gap\) \+ var\(--chrome-safe-top\) \+ var\(--floating-chrome-height\) \+ 18px\)[\s\S]+padding-bottom: calc\(var\(--floating-chrome-gap\) \+ var\(--chrome-safe-bottom\) \+ var\(--floating-chrome-height\) \+ 49px\)/);
+  assert.match(css, /@media \(orientation: landscape\) and \(max-height: 500px\) \{[\s\S]+html\[data-interface="modern"\] body \{ padding-left: 0; \}[\s\S]+html\[data-interface="modern"\] \.bottom-nav \{[\s\S]+top: auto[\s\S]+bottom: calc\(var\(--floating-chrome-gap\) \+ var\(--chrome-safe-bottom\)\)[\s\S]+width: var\(--floating-chrome-width\)[\s\S]+height: var\(--floating-chrome-height\)[\s\S]+grid-template: 1fr \/ repeat\(4, minmax\(0, 1fr\)\)[\s\S]+transform: translateX\(-50%\)/);
   assert.doesNotMatch(css, /html\[data-interface="modern"\] \.bottom-nav \{[\s\S]{0,300}width: 78px/);
 });
 
-test("верхняя safe-area повторно синхронизируется после поворота iOS", () => {
+test("safe-area плавающих панелей синхронизируется после поворота, но не при скроллинге", () => {
   const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
-  assert.match(app, /function measureSafeAreaTop\(\)[\s\S]+env\(safe-area-inset-top,0px\)[\s\S]+getComputedStyle\(probe\)\.top/);
-  assert.match(app, /function syncHeaderSafeTop\(\)[\s\S]+visualViewport\?\.offsetTop[\s\S]+Math\.max\(measureSafeAreaTop\(\), viewportOffsetTop\)[\s\S]+--header-safe-top/);
-  assert.match(app, /headerSafeTopSyncTimers = \[0, 60, 180, 360, 720\]\.map/);
-  assert.match(app, /addEventListener\("orientationchange", scheduleHeaderSafeTopSync\)/);
+  assert.match(app, /function measureSafeAreaInset\(side\)[\s\S]+env\(safe-area-inset-\$\{side\},0px\)[\s\S]+getComputedStyle\(probe\)\[side\]/);
+  assert.match(app, /function syncChromeSafeInsets\(\)[\s\S]+viewport\?\.offsetTop[\s\S]+viewportBottomInset[\s\S]+measureSafeAreaInset\("top"\)[\s\S]+measureSafeAreaInset\("bottom"\)[\s\S]+--chrome-safe-top[\s\S]+--chrome-safe-bottom/);
+  assert.match(app, /chromeSafeInsetSyncTimers = \[0, 60, 180, 360, 720\]\.map/);
+  assert.match(app, /addEventListener\("orientationchange", scheduleChromeSafeInsetSync\)/);
   assert.match(app, /addEventListener\("resize", debounce\(handleViewportOrientationChange, 80\)\)/);
+  assert.match(app, /handleVisualViewportChange = debounce\(\(\) => \{ syncVisualViewport\(\); ensureFocusedEntryFieldVisible\(\); \}, 80\)/);
+  assert.doesNotMatch(app, /handleVisualViewportChange = debounce\([\s\S]{0,180}syncChromeSafeInsets/);
 });
 
 test("в современном интерфейсе дневниковые фильтры занимают всю ширину в альбомной ориентации", () => {
