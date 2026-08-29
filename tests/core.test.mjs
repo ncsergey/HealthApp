@@ -609,30 +609,25 @@ test("CSS масштабирует full, ограничивает reduced и п�
 
 test("в современном интерфейсе шапка и нижнее меню образуют симметричные плавающие панели", () => {
   const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   assert.match(css, /--floating-chrome-gap: 12px/);
   assert.match(css, /--floating-chrome-height: 71px/);
-  assert.match(css, /--floating-chrome-width: min\(calc\(100% - 24px - var\(--safe-left\) - var\(--safe-right\)\), 680px\)/);
-  assert.match(css, /--chrome-safe-top: var\(--safe-top\)/);
-  assert.match(css, /--chrome-safe-bottom: var\(--safe-bottom\)/);
-  assert.match(css, /html\[data-interface="modern"\] \.app-header \{[\s\S]+position: fixed[\s\S]+top: calc\(var\(--floating-chrome-gap\) \+ var\(--chrome-safe-top\)\)[\s\S]+left: 50%[\s\S]+width: var\(--floating-chrome-width\)[\s\S]+height: var\(--floating-chrome-height\)[\s\S]+transform: translateX\(-50%\)/);
-  assert.match(css, /html\[data-interface="modern"\] \.bottom-nav \{[\s\S]+bottom: calc\(var\(--floating-chrome-gap\) \+ var\(--chrome-safe-bottom\)\)[\s\S]+left: 50%[\s\S]+width: var\(--floating-chrome-width\)[\s\S]+height: var\(--floating-chrome-height\)/);
-  assert.match(css, /html\[data-interface="modern"\] \.app-main \{[\s\S]+padding-top: calc\(var\(--floating-chrome-gap\) \+ var\(--chrome-safe-top\) \+ var\(--floating-chrome-height\) \+ 18px\)[\s\S]+padding-bottom: calc\(var\(--floating-chrome-gap\) \+ var\(--chrome-safe-bottom\) \+ var\(--floating-chrome-height\) \+ 49px\)/);
-  assert.match(css, /@media \(orientation: landscape\) and \(max-height: 500px\) \{[\s\S]+html\[data-interface="modern"\] body \{ padding-left: 0; \}[\s\S]+html\[data-interface="modern"\] \.bottom-nav \{[\s\S]+top: auto[\s\S]+bottom: calc\(var\(--floating-chrome-gap\) \+ var\(--chrome-safe-bottom\)\)[\s\S]+width: var\(--floating-chrome-width\)[\s\S]+height: var\(--floating-chrome-height\)[\s\S]+grid-template: 1fr \/ repeat\(4, minmax\(0, 1fr\)\)[\s\S]+transform: translateX\(-50%\)/);
+  assert.match(html, /<div class="top-chrome-anchor">\s+<header class="app-header">/);
+  assert.match(html, /<div class="bottom-chrome-anchor">\s+<nav class="bottom-nav"/);
+  assert.match(css, /html\[data-interface="modern"\] \.top-chrome-anchor,[\s\S]+html\[data-interface="modern"\] \.bottom-chrome-anchor \{[\s\S]+position: fixed[\s\S]+display: flex[\s\S]+padding-right: calc\(var\(--floating-chrome-gap\) \+ var\(--safe-right\)\)[\s\S]+padding-left: calc\(var\(--floating-chrome-gap\) \+ var\(--safe-left\)\)[\s\S]+pointer-events: none/);
+  assert.match(css, /html\[data-interface="modern"\] \.top-chrome-anchor \{[\s\S]+top: 0[\s\S]+padding-top: calc\(var\(--floating-chrome-gap\) \+ var\(--safe-top\)\)/);
+  assert.match(css, /html\[data-interface="modern"\] \.bottom-chrome-anchor \{[\s\S]+bottom: 0[\s\S]+padding-bottom: calc\(var\(--floating-chrome-gap\) \+ var\(--safe-bottom\)\)/);
+  assert.match(css, /html\[data-interface="modern"\] \.app-header \{[\s\S]+position: relative[\s\S]+width: min\(100%, 680px\)[\s\S]+height: var\(--floating-chrome-height\)[\s\S]+transform: none[\s\S]+pointer-events: auto/);
+  assert.match(css, /html\[data-interface="modern"\] \.bottom-nav \{[\s\S]+position: relative[\s\S]+bottom: auto[\s\S]+width: min\(100%, 680px\)[\s\S]+height: var\(--floating-chrome-height\)[\s\S]+transform: none[\s\S]+pointer-events: auto/);
+  assert.match(css, /html\[data-interface="modern"\] \.app-main \{[\s\S]+padding-top: calc\(var\(--floating-chrome-gap\) \+ var\(--safe-top\) \+ var\(--floating-chrome-height\) \+ 18px\)[\s\S]+padding-bottom: calc\(var\(--floating-chrome-gap\) \+ var\(--safe-bottom\) \+ var\(--floating-chrome-height\) \+ 49px\)/);
+  assert.match(css, /@media \(orientation: landscape\) and \(max-height: 500px\) \{[\s\S]+html\[data-interface="modern"\] body \{ padding-left: 0; \}[\s\S]+html\[data-interface="modern"\] \.bottom-nav \{[\s\S]+top: auto[\s\S]+bottom: auto[\s\S]+width: min\(100%, 680px\)[\s\S]+height: var\(--floating-chrome-height\)[\s\S]+grid-template: 1fr \/ repeat\(4, minmax\(0, 1fr\)\)[\s\S]+transform: none/);
   assert.doesNotMatch(css, /html\[data-interface="modern"\] \.bottom-nav \{[\s\S]{0,300}width: 78px/);
 });
 
-test("safe-area плавающих панелей синхронизируется после поворота, но не при скроллинге", () => {
+test("safe-area плавающих панелей полностью управляется CSS-якорями", () => {
   const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
-  assert.match(app, /function measureSafeAreaInsets\(\)[\s\S]+padding-top:env\(safe-area-inset-top,0px\)[\s\S]+padding-bottom:env\(safe-area-inset-bottom,0px\)[\s\S]+styles\.paddingTop[\s\S]+styles\.paddingBottom/);
-  assert.match(app, /function syncChromeSafeInsets\(\)[\s\S]+measureSafeAreaInsets\(\)[\s\S]+--chrome-safe-top[\s\S]+--chrome-safe-bottom/);
-  const chromeSync = app.match(/function syncChromeSafeInsets\(\) \{([\s\S]+?)\n\}/)?.[1] || "";
-  assert.doesNotMatch(chromeSync, /visualViewport|offsetTop|viewportBottomInset/);
-  assert.match(app, /chromeSafeInsetSyncTimers = \[0, 60, 180, 360, 720, 1200\]\.map/);
-  assert.match(app, /function bindEvents\(\) \{\s+syncVisualViewport\(\);\s+scheduleChromeSafeInsetSync\(\)/);
-  assert.match(app, /addEventListener\("orientationchange", scheduleChromeSafeInsetSync\)/);
-  assert.match(app, /addEventListener\("resize", debounce\(handleViewportOrientationChange, 80\)\)/);
   assert.match(app, /handleVisualViewportChange = debounce\(\(\) => \{ syncVisualViewport\(\); ensureFocusedEntryFieldVisible\(\); \}, 80\)/);
-  assert.doesNotMatch(app, /handleVisualViewportChange = debounce\([\s\S]{0,180}syncChromeSafeInsets/);
+  assert.doesNotMatch(app, /chromeSafeInset|measureSafeAreaInset|syncChromeSafeInset|handleViewportOrientation|orientationchange/);
 });
 
 test("в современном интерфейсе дневниковые фильтры занимают всю ширину в альбомной ориентации", () => {

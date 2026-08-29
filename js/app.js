@@ -23,8 +23,6 @@ const DIRECTORY_META = Object.freeze({ bodyParts: { title: "Части тела"
 let backupPendingFallback = false;
 let backupReminderDismissedFallback = false;
 let modalScrollY = 0;
-let chromeSafeInsetSyncTimers = [];
-let viewportOrientation = window.innerWidth > window.innerHeight ? "landscape" : "portrait";
 
 const initialUiSettings = (() => {
   try { return initializeUiSettings(); }
@@ -203,40 +201,6 @@ function syncVisualViewport() {
   const bottomInset = Math.max(0, layoutHeight - viewport.height - viewport.offsetTop);
   document.documentElement.style.setProperty("--visual-viewport-height", `${viewport.height}px`);
   document.documentElement.style.setProperty("--visual-viewport-bottom", `${bottomInset}px`);
-}
-
-function measureSafeAreaInsets() {
-  const probe = document.createElement("div");
-  probe.setAttribute("aria-hidden", "true");
-  probe.style.cssText = "position:absolute;top:0;left:0;width:0;height:0;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);visibility:hidden;pointer-events:none";
-  document.documentElement.append(probe);
-  const styles = getComputedStyle(probe);
-  const top = Number.parseFloat(styles.paddingTop);
-  const bottom = Number.parseFloat(styles.paddingBottom);
-  probe.remove();
-  return {
-    top: Number.isFinite(top) ? Math.max(0, top) : 0,
-    bottom: Number.isFinite(bottom) ? Math.max(0, bottom) : 0,
-  };
-}
-
-function syncChromeSafeInsets() {
-  const safeArea = measureSafeAreaInsets();
-  const root = document.documentElement;
-  root.style.setProperty("--chrome-safe-top", `${Math.round(safeArea.top * 100) / 100}px`);
-  root.style.setProperty("--chrome-safe-bottom", `${Math.round(safeArea.bottom * 100) / 100}px`);
-}
-
-function scheduleChromeSafeInsetSync() {
-  for (const timer of chromeSafeInsetSyncTimers) clearTimeout(timer);
-  chromeSafeInsetSyncTimers = [0, 60, 180, 360, 720, 1200].map((delay) => setTimeout(syncChromeSafeInsets, delay));
-}
-
-function handleViewportOrientationChange() {
-  const nextOrientation = window.innerWidth > window.innerHeight ? "landscape" : "portrait";
-  if (nextOrientation === viewportOrientation) return;
-  viewportOrientation = nextOrientation;
-  scheduleChromeSafeInsetSync();
 }
 
 function syncModalState() {
@@ -1099,7 +1063,6 @@ function chooseHeadacheEntry() {
 
 function bindEvents() {
   syncVisualViewport();
-  scheduleChromeSafeInsetSync();
   document.querySelectorAll('[role="radiogroup"]').forEach((group) => group.addEventListener("keydown", (event) => {
     const current = event.target.closest('[role="radio"]');
     if (!current || !group.contains(current) || !["ArrowDown", "ArrowRight", "ArrowUp", "ArrowLeft", "Home", "End"].includes(event.key)) return;
@@ -1117,8 +1080,6 @@ function bindEvents() {
     window.visualViewport.addEventListener("resize", handleVisualViewportChange);
     window.visualViewport.addEventListener("scroll", handleVisualViewportChange);
   }
-  window.addEventListener("orientationchange", scheduleChromeSafeInsetSync);
-  window.addEventListener("resize", debounce(handleViewportOrientationChange, 80));
   document.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => closeDialog(button.closest("dialog")))); document.querySelectorAll("dialog").forEach((dialog) => dialog.addEventListener("close", () => queueMicrotask(syncModalState)));
   document.querySelectorAll("dialog.sheet").forEach((dialog) => dialog.addEventListener("click", (event) => { if (event.target === dialog) closeDialog(dialog); }));
   document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view)));
