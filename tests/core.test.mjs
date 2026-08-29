@@ -662,9 +662,16 @@ test("плавающая дата не учитывает высоту заго�
   assert.doesNotMatch(css, /html\[data-interface="modern"\] \.app-main \{[^}]*padding-(?:top|bottom):/);
 });
 
-test("в современном интерфейсе дневниковые фильтры занимают всю ширину в альбомной ориентации", () => {
+test("в обоих интерфейсах дневниковые фильтры занимают всю ширину в альбомной ориентации", () => {
   const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
-  assert.match(css, /@media \(orientation: landscape\) and \(max-height: 500px\) \{[\s\S]+html\[data-interface="modern"\] \.filter-scroll \{[\s\S]+overflow-x: visible[\s\S]+html\[data-interface="modern"\] \.filter-scroll::after \{[\s\S]+display: none[\s\S]+html\[data-interface="modern"\] \.diary-filters \{[\s\S]+width: 100%[\s\S]+min-width: 0[\s\S]+grid-template-columns: repeat\(6, minmax\(0, 1fr\)\)/);
+  const start = css.indexOf("@media (orientation: landscape) and (max-height: 500px)");
+  const end = css.indexOf("/* Большие мониторы", start);
+  const landscapeCss = css.slice(start, end);
+  assert.ok(start >= 0 && end > start);
+  assert.match(landscapeCss, /\.filter-scroll \{ overflow-x: visible; \}/);
+  assert.match(landscapeCss, /\.filter-scroll::after \{ display: none; \}/);
+  assert.match(landscapeCss, /\.diary-filters \{[\s\S]+width: 100%[\s\S]+min-width: 0[\s\S]+grid-template-columns: repeat\(6, minmax\(0, 1fr\)\)/);
+  assert.match(landscapeCss, /\.diary-filters button \{ min-width: 0; \}/);
 });
 
 test("эмодзи справочников используют обводку современных карточек", () => {
