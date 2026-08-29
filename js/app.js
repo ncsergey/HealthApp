@@ -205,32 +205,31 @@ function syncVisualViewport() {
   document.documentElement.style.setProperty("--visual-viewport-bottom", `${bottomInset}px`);
 }
 
-function measureSafeAreaInset(side) {
+function measureSafeAreaInsets() {
   const probe = document.createElement("div");
   probe.setAttribute("aria-hidden", "true");
-  probe.style.cssText = `position:fixed;${side}:env(safe-area-inset-${side},0px);left:0;width:0;height:0;visibility:hidden;pointer-events:none`;
+  probe.style.cssText = "position:absolute;top:0;left:0;width:0;height:0;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);visibility:hidden;pointer-events:none";
   document.documentElement.append(probe);
-  const value = Number.parseFloat(getComputedStyle(probe)[side]);
+  const styles = getComputedStyle(probe);
+  const top = Number.parseFloat(styles.paddingTop);
+  const bottom = Number.parseFloat(styles.paddingBottom);
   probe.remove();
-  return Number.isFinite(value) ? Math.max(0, value) : 0;
+  return {
+    top: Number.isFinite(top) ? Math.max(0, top) : 0,
+    bottom: Number.isFinite(bottom) ? Math.max(0, bottom) : 0,
+  };
 }
 
 function syncChromeSafeInsets() {
-  const viewport = window.visualViewport;
-  const viewportOffsetTop = Math.max(0, viewport?.offsetTop || 0);
-  const layoutHeight = Math.max(document.documentElement.clientHeight, window.innerHeight);
-  const keyboardLikelyOpen = Boolean(viewport && viewport.height < layoutHeight * .7);
-  const viewportBottomInset = keyboardLikelyOpen || !viewport ? 0 : Math.max(0, layoutHeight - viewport.height - viewport.offsetTop);
-  const safeTop = Math.max(measureSafeAreaInset("top"), viewportOffsetTop);
-  const safeBottom = Math.max(measureSafeAreaInset("bottom"), viewportBottomInset);
+  const safeArea = measureSafeAreaInsets();
   const root = document.documentElement;
-  root.style.setProperty("--chrome-safe-top", `${Math.round(safeTop * 100) / 100}px`);
-  root.style.setProperty("--chrome-safe-bottom", `${Math.round(safeBottom * 100) / 100}px`);
+  root.style.setProperty("--chrome-safe-top", `${Math.round(safeArea.top * 100) / 100}px`);
+  root.style.setProperty("--chrome-safe-bottom", `${Math.round(safeArea.bottom * 100) / 100}px`);
 }
 
 function scheduleChromeSafeInsetSync() {
   for (const timer of chromeSafeInsetSyncTimers) clearTimeout(timer);
-  chromeSafeInsetSyncTimers = [0, 60, 180, 360, 720].map((delay) => setTimeout(syncChromeSafeInsets, delay));
+  chromeSafeInsetSyncTimers = [0, 60, 180, 360, 720, 1200].map((delay) => setTimeout(syncChromeSafeInsets, delay));
 }
 
 function handleViewportOrientationChange() {
@@ -1100,7 +1099,7 @@ function chooseHeadacheEntry() {
 
 function bindEvents() {
   syncVisualViewport();
-  syncChromeSafeInsets();
+  scheduleChromeSafeInsetSync();
   document.querySelectorAll('[role="radiogroup"]').forEach((group) => group.addEventListener("keydown", (event) => {
     const current = event.target.closest('[role="radio"]');
     if (!current || !group.contains(current) || !["ArrowDown", "ArrowRight", "ArrowUp", "ArrowLeft", "Home", "End"].includes(event.key)) return;

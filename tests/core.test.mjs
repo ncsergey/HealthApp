@@ -623,9 +623,12 @@ test("в современном интерфейсе шапка и нижнее 
 
 test("safe-area плавающих панелей синхронизируется после поворота, но не при скроллинге", () => {
   const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
-  assert.match(app, /function measureSafeAreaInset\(side\)[\s\S]+env\(safe-area-inset-\$\{side\},0px\)[\s\S]+getComputedStyle\(probe\)\[side\]/);
-  assert.match(app, /function syncChromeSafeInsets\(\)[\s\S]+viewport\?\.offsetTop[\s\S]+viewportBottomInset[\s\S]+measureSafeAreaInset\("top"\)[\s\S]+measureSafeAreaInset\("bottom"\)[\s\S]+--chrome-safe-top[\s\S]+--chrome-safe-bottom/);
-  assert.match(app, /chromeSafeInsetSyncTimers = \[0, 60, 180, 360, 720\]\.map/);
+  assert.match(app, /function measureSafeAreaInsets\(\)[\s\S]+padding-top:env\(safe-area-inset-top,0px\)[\s\S]+padding-bottom:env\(safe-area-inset-bottom,0px\)[\s\S]+styles\.paddingTop[\s\S]+styles\.paddingBottom/);
+  assert.match(app, /function syncChromeSafeInsets\(\)[\s\S]+measureSafeAreaInsets\(\)[\s\S]+--chrome-safe-top[\s\S]+--chrome-safe-bottom/);
+  const chromeSync = app.match(/function syncChromeSafeInsets\(\) \{([\s\S]+?)\n\}/)?.[1] || "";
+  assert.doesNotMatch(chromeSync, /visualViewport|offsetTop|viewportBottomInset/);
+  assert.match(app, /chromeSafeInsetSyncTimers = \[0, 60, 180, 360, 720, 1200\]\.map/);
+  assert.match(app, /function bindEvents\(\) \{\s+syncVisualViewport\(\);\s+scheduleChromeSafeInsetSync\(\)/);
   assert.match(app, /addEventListener\("orientationchange", scheduleChromeSafeInsetSync\)/);
   assert.match(app, /addEventListener\("resize", debounce\(handleViewportOrientationChange, 80\)\)/);
   assert.match(app, /handleVisualViewportChange = debounce\(\(\) => \{ syncVisualViewport\(\); ensureFocusedEntryFieldVisible\(\); \}, 80\)/);
