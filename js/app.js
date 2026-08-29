@@ -14,6 +14,7 @@ const PAGE_SIZE = 60;
 const BIRTHDAY_EMOJIS = Object.freeze(["🎉", "🥳", "🎂", "🎊", "🎈", "🎁", "🍰"]);
 const BACKUP_PENDING_KEY = "myhealth:backup-pending:v2";
 const BACKUP_REMINDER_DISMISSED_KEY = "myhealth:backup-reminder-dismissed:v1";
+const PORTRAIT_SAFE_TOP_KEY = "myhealth:portrait-safe-top:v1";
 const GLUCOSE_CONTEXT = Object.freeze({ fasting: "Натощак", beforeMeal: "Перед едой", after1h: "Через 1 час после начала еды", after2h: "Через 2 часа после начала еды", random: "Случайное измерение" });
 const GLUCOSE_FORMAT = Object.freeze({ plasma: "Эквивалент плазмы", wholeBlood: "Цельная кровь" });
 const PULSE_CONTEXT = Object.freeze({ resting: "В покое", active: "После физической нагрузки", unknown: "Контекст не указан" });
@@ -23,6 +24,10 @@ const DIRECTORY_META = Object.freeze({ bodyParts: { title: "Части тела"
 let backupPendingFallback = false;
 let backupReminderDismissedFallback = false;
 let modalScrollY = 0;
+let confirmedPortraitSafeTop = null;
+let portraitSafeTopCandidate = null;
+let portraitSafeTopCandidateCount = 0;
+let portraitSafeTopTimers = [];
 
 const initialUiSettings = (() => {
   try { return initializeUiSettings(); }
@@ -201,6 +206,60 @@ function syncVisualViewport() {
   const bottomInset = Math.max(0, layoutHeight - viewport.height - viewport.offsetTop);
   document.documentElement.style.setProperty("--visual-viewport-height", `${viewport.height}px`);
   document.documentElement.style.setProperty("--visual-viewport-bottom", `${bottomInset}px`);
+}
+
+function isPortraitViewport() {
+  return window.matchMedia("(orientation: portrait)").matches;
+}
+
+function measurePortraitSafeTop() {
+  const probe = document.createElement("div");
+  probe.setAttribute("aria-hidden", "true");
+  probe.style.cssText = "position:absolute;top:0;left:0;width:0;height:0;padding-top:env(safe-area-inset-top,0px);visibility:hidden;pointer-events:none";
+  document.documentElement.append(probe);
+  const value = Number.parseFloat(getComputedStyle(probe).paddingTop);
+  probe.remove();
+  return Number.isFinite(value) && value >= 0 && value <= 80 ? value : null;
+}
+
+function restorePortraitSafeTop() {
+  if (confirmedPortraitSafeTop !== null) return;
+  try {
+    const cached = Number.parseFloat(sessionStorage.getItem(PORTRAIT_SAFE_TOP_KEY));
+    if (Number.isFinite(cached) && cached >= 0 && cached <= 80) confirmedPortraitSafeTop = cached;
+  } catch { /* session storage unavailable */ }
+}
+
+function applyPortraitSafeTop(value) {
+  document.documentElement.style.setProperty("--shell-safe-top", `${Math.round(value * 100) / 100}px`);
+}
+
+function confirmPortraitSafeTop(value) {
+  confirmedPortraitSafeTop = value;
+  applyPortraitSafeTop(value);
+  try { sessionStorage.setItem(PORTRAIT_SAFE_TOP_KEY, String(value)); } catch { /* session storage unavailable */ }
+}
+
+function samplePortraitSafeTop() {
+  if (!isPortraitViewport()) return;
+  const measured = measurePortraitSafeTop();
+  if (measured === null) return;
+  if (portraitSafeTopCandidate !== null && Math.abs(measured - portraitSafeTopCandidate) <= .5) portraitSafeTopCandidateCount += 1;
+  else { portraitSafeTopCandidate = measured; portraitSafeTopCandidateCount = 1; }
+  if (portraitSafeTopCandidateCount < 3) return;
+  if (confirmedPortraitSafeTop === null || measured >= confirmedPortraitSafeTop) confirmPortraitSafeTop(measured);
+}
+
+function schedulePortraitSafeTopSync() {
+  for (const timer of portraitSafeTopTimers) clearTimeout(timer);
+  portraitSafeTopTimers = [];
+  const root = document.documentElement;
+  if (!isPortraitViewport()) { root.style.removeProperty("--shell-safe-top"); return; }
+  restorePortraitSafeTop();
+  if (confirmedPortraitSafeTop !== null) applyPortraitSafeTop(confirmedPortraitSafeTop);
+  portraitSafeTopCandidate = null;
+  portraitSafeTopCandidateCount = 0;
+  portraitSafeTopTimers = [0, 60, 180, 360, 720, 1200].map((delay) => setTimeout(samplePortraitSafeTop, delay));
 }
 
 function pageScrollContainer() {
@@ -1079,6 +1138,7 @@ function chooseHeadacheEntry() {
 
 function bindEvents() {
   syncVisualViewport();
+  schedulePortraitSafeTopSync();
   document.querySelectorAll('[role="radiogroup"]').forEach((group) => group.addEventListener("keydown", (event) => {
     const current = event.target.closest('[role="radio"]');
     if (!current || !group.contains(current) || !["ArrowDown", "ArrowRight", "ArrowUp", "ArrowLeft", "Home", "End"].includes(event.key)) return;
@@ -1096,6 +1156,10 @@ function bindEvents() {
     window.visualViewport.addEventListener("resize", handleVisualViewportChange);
     window.visualViewport.addEventListener("scroll", handleVisualViewportChange);
   }
+  const portraitOrientation = window.matchMedia("(orientation: portrait)");
+  if (typeof portraitOrientation.addEventListener === "function") portraitOrientation.addEventListener("change", schedulePortraitSafeTopSync);
+  else portraitOrientation.addListener(schedulePortraitSafeTopSync);
+  window.addEventListener("orientationchange", schedulePortraitSafeTopSync);
   document.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => closeDialog(button.closest("dialog")))); document.querySelectorAll("dialog").forEach((dialog) => dialog.addEventListener("close", () => queueMicrotask(syncModalState)));
   document.querySelectorAll("dialog.sheet").forEach((dialog) => dialog.addEventListener("click", (event) => { if (event.target === dialog) closeDialog(dialog); }));
   document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view)));

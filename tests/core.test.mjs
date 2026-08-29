@@ -615,21 +615,28 @@ test("в современном интерфейсе шапка и нижнее 
   assert.match(html, /<div class="app-shell">\s+<div class="top-chrome-anchor">\s+<header class="app-header">/);
   assert.match(html, /<div class="bottom-chrome-anchor">\s+<nav class="bottom-nav"[\s\S]+<\/nav>\s+<\/div>\s+<\/div>\s+<dialog/);
   assert.match(css, /\.app-shell, \.top-chrome-anchor, \.bottom-chrome-anchor \{ display: contents; \}/);
-  assert.match(css, /html\[data-interface="modern"\] \.app-shell \{[\s\S]+position: absolute[\s\S]+inset: 0[\s\S]+display: block[\s\S]+overflow: hidden/);
-  assert.match(css, /html\[data-interface="modern"\] \.top-chrome-anchor,[\s\S]+html\[data-interface="modern"\] \.bottom-chrome-anchor \{[\s\S]+position: absolute[\s\S]+display: flex[\s\S]+padding-right: calc\(var\(--floating-chrome-gap\) \+ var\(--safe-right\)\)[\s\S]+padding-left: calc\(var\(--floating-chrome-gap\) \+ var\(--safe-left\)\)[\s\S]+pointer-events: none/);
-  assert.match(css, /html\[data-interface="modern"\] \.top-chrome-anchor \{[\s\S]+top: 0[\s\S]+padding-top: calc\(var\(--floating-chrome-gap\) \+ var\(--safe-top\)\)/);
-  assert.match(css, /html\[data-interface="modern"\] \.bottom-chrome-anchor \{[\s\S]+bottom: 0[\s\S]+padding-bottom: calc\(var\(--floating-chrome-gap\) \+ var\(--safe-bottom\)\)/);
+  assert.match(css, /--shell-safe-top: var\(--safe-top\)/);
+  assert.match(css, /html\[data-interface="modern"\] \.app-shell \{[\s\S]+position: absolute[\s\S]+inset: 0[\s\S]+display: grid[\s\S]+grid-template: minmax\(0, 1fr\) \/ minmax\(0, 1fr\)[\s\S]+padding-top: var\(--shell-safe-top\)[\s\S]+padding-bottom: var\(--safe-bottom\)[\s\S]+overflow: hidden/);
+  assert.match(css, /html\[data-interface="modern"\] \.top-chrome-anchor,[\s\S]+html\[data-interface="modern"\] \.bottom-chrome-anchor \{[\s\S]+position: relative[\s\S]+grid-area: 1 \/ 1[\s\S]+display: flex[\s\S]+padding-right: calc\(var\(--floating-chrome-gap\) \+ var\(--safe-right\)\)[\s\S]+padding-left: calc\(var\(--floating-chrome-gap\) \+ var\(--safe-left\)\)[\s\S]+pointer-events: none/);
+  assert.match(css, /html\[data-interface="modern"\] \.top-chrome-anchor \{[\s\S]+align-self: start[\s\S]+padding-top: var\(--floating-chrome-gap\)/);
+  assert.match(css, /html\[data-interface="modern"\] \.bottom-chrome-anchor \{[\s\S]+align-self: end[\s\S]+padding-bottom: var\(--floating-chrome-gap\)/);
   assert.match(css, /html\[data-interface="modern"\] \.app-header \{[\s\S]+position: relative[\s\S]+width: min\(100%, 680px\)[\s\S]+height: var\(--floating-chrome-height\)[\s\S]+transform: none[\s\S]+pointer-events: auto/);
   assert.match(css, /html\[data-interface="modern"\] \.bottom-nav \{[\s\S]+position: relative[\s\S]+bottom: auto[\s\S]+width: min\(100%, 680px\)[\s\S]+height: var\(--floating-chrome-height\)[\s\S]+transform: none[\s\S]+pointer-events: auto/);
-  assert.match(css, /html\[data-interface="modern"\] \.app-main \{[\s\S]+padding-top: calc\(var\(--floating-chrome-gap\) \+ var\(--safe-top\) \+ var\(--floating-chrome-height\) \+ 18px\)[\s\S]+padding-bottom: calc\(var\(--floating-chrome-gap\) \+ var\(--safe-bottom\) \+ var\(--floating-chrome-height\) \+ 49px\)/);
+  assert.match(css, /html\[data-interface="modern"\] \.app-main \{[\s\S]+padding-top: calc\(var\(--floating-chrome-gap\) \+ var\(--floating-chrome-height\) \+ 18px\)[\s\S]+padding-bottom: calc\(var\(--floating-chrome-gap\) \+ var\(--floating-chrome-height\) \+ 49px\)/);
   assert.match(css, /@media \(orientation: landscape\) and \(max-height: 500px\) \{[\s\S]+html\[data-interface="modern"\] body \{ padding-left: 0; \}[\s\S]+html\[data-interface="modern"\] \.bottom-nav \{[\s\S]+top: auto[\s\S]+bottom: auto[\s\S]+width: min\(100%, 680px\)[\s\S]+height: var\(--floating-chrome-height\)[\s\S]+grid-template: 1fr \/ repeat\(4, minmax\(0, 1fr\)\)[\s\S]+transform: none/);
   assert.doesNotMatch(css, /html\[data-interface="modern"\] \.bottom-nav \{[\s\S]{0,300}width: 78px/);
 });
 
-test("safe-area плавающих панелей полностью управляется CSS-якорями", () => {
+test("портретный safe-area оболочки сохраняется только после подтверждения", () => {
   const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
   assert.match(app, /handleVisualViewportChange = debounce\(\(\) => \{ syncVisualViewport\(\); ensureFocusedEntryFieldVisible\(\); \}, 80\)/);
-  assert.doesNotMatch(app, /chromeSafeInset|measureSafeAreaInset|syncChromeSafeInset|handleViewportOrientation|orientationchange/);
+  assert.match(app, /PORTRAIT_SAFE_TOP_KEY = "myhealth:portrait-safe-top:v1"/);
+  assert.match(app, /function measurePortraitSafeTop\(\)[\s\S]+padding-top:env\(safe-area-inset-top,0px\)[\s\S]+getComputedStyle\(probe\)\.paddingTop/);
+  assert.match(app, /function samplePortraitSafeTop\(\)[\s\S]+portraitSafeTopCandidateCount < 3[\s\S]+confirmedPortraitSafeTop === null \|\| measured >= confirmedPortraitSafeTop[\s\S]+confirmPortraitSafeTop\(measured\)/);
+  assert.match(app, /function schedulePortraitSafeTopSync\(\)[\s\S]+removeProperty\("--shell-safe-top"\)[\s\S]+applyPortraitSafeTop\(confirmedPortraitSafeTop\)[\s\S]+\[0, 60, 180, 360, 720, 1200\]/);
+  assert.match(app, /portraitOrientation\.addEventListener\("change", schedulePortraitSafeTopSync\)/);
+  assert.match(app, /addEventListener\("orientationchange", schedulePortraitSafeTopSync\)/);
+  assert.doesNotMatch(app, /syncChromeSafeInset|viewportOffsetTop|viewportBottomInset/);
 });
 
 test("современный интерфейс прокручивает только содержимое неподвижной оболочки", () => {
@@ -637,7 +644,7 @@ test("современный интерфейс прокручивает тол�
   const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
   assert.match(css, /html\[data-interface="modern"\] body \{[\s\S]+height: 100%[\s\S]+overflow: hidden[\s\S]+overscroll-behavior: none/);
   assert.match(css, /html\[data-interface="modern"\] \{[\s\S]+height: 100%[\s\S]+overflow: hidden[\s\S]+overscroll-behavior: none/);
-  assert.match(css, /html\[data-interface="modern"\] \.app-main \{[\s\S]+position: absolute[\s\S]+inset: 0[\s\S]+overflow-x: hidden[\s\S]+overflow-y: auto[\s\S]+overscroll-behavior-y: contain[\s\S]+-webkit-overflow-scrolling: touch/);
+  assert.match(css, /html\[data-interface="modern"\] \.app-main \{[\s\S]+position: relative[\s\S]+inset: auto[\s\S]+grid-area: 1 \/ 1[\s\S]+align-self: stretch[\s\S]+overflow-x: hidden[\s\S]+overflow-y: auto[\s\S]+overscroll-behavior-y: contain[\s\S]+-webkit-overflow-scrolling: touch/);
   assert.match(css, /html\[data-interface="modern"\]\.modal-open \.app-main \{ overflow-y: hidden; overscroll-behavior: none; \}/);
   assert.doesNotMatch(css, /html\[data-interface="modern"\] \.top-chrome-anchor,[\s\S]{0,500}position: fixed/);
   assert.match(app, /function pageScrollContainer\(\)[\s\S]+dataset\.interface === "modern"[\s\S]+querySelector\("\.app-main"\)[\s\S]+document\.scrollingElement/);
