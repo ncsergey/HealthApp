@@ -27,7 +27,7 @@
   <div class="app-shell">
     <div class="top-chrome-anchor">
       <header class="app-header">
-        <div class="brand"><span id="brand-icon-container" class="brand-icon-container" aria-hidden="true"><img class="brand-icon" src="./icons/icon-192.png" alt=""><span class="brand-emoji" hidden></span></span><div><p class="eyebrow">Дневник здоровья · <button id="app-version" class="app-version" type="button" disabled aria-label="Версия v147">v147</button></p><h1>MyHealth</h1></div></div>
+        <div class="brand"><span id="brand-icon-container" class="brand-icon-container" aria-hidden="true"><img class="brand-icon" src="./icons/icon-192.png" alt=""><span class="brand-emoji" hidden></span></span><div><p class="eyebrow">Дневник здоровья · <button id="app-version" class="app-version" type="button" disabled aria-label="Версия v148">v148</button></p><h1>MyHealth</h1></div></div>
         <div class="header-actions"><button id="settings-button" class="icon-button" type="button" data-view="settings" data-settings-root aria-label="Настройки" title="Настройки"><span aria-hidden="true">⚙️</span></button></div>
       </header>
     </div>
@@ -244,12 +244,13 @@
     <div class="dialog-actions"><button class="secondary-button" type="button" data-close>Отмена</button><button id="weight-save" class="primary-button" type="submit">Сохранить</button></div>
   </form></dialog>
 
-  <dialog id="profile-dialog" class="sheet form-sheet"><form id="profile-form" novalidate>
+  <dialog id="profile-dialog" class="sheet form-sheet entry-form-dialog"><form id="profile-form" novalidate>
     <div class="dialog-header"><div><p class="eyebrow">Личный профиль</p><h2 id="profile-form-title">Заполнить данные</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть"><svg class="close-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 3 21 21 M21 3 3 21"></path></svg></button></div>
-    <label class="field"><span>Дата рождения</span><input id="profile-birth-date" type="date" required></label>
-    <label class="field select-field"><span>Пол</span><select id="profile-sex" required><option value="">Выберите</option><option value="male">Мужской</option><option value="female">Женский</option></select></label>
-    <label class="field"><span>Рост, см</span><input id="profile-height" type="number" inputmode="numeric" min="50" max="300" step="1" required></label>
-    <p id="profile-error" class="form-error" role="alert"></p><div class="dialog-actions"><button class="secondary-button" type="button" data-close>Отмена</button><button id="profile-save" class="primary-button" type="submit">Сохранить</button></div>
+    <div class="entry-form-content"><label class="field"><span>Дата рождения</span><input id="profile-birth-date" type="date" required></label>
+      <label class="field select-field"><span>Пол</span><select id="profile-sex" required><option value="">Выберите</option><option value="male">Мужской</option><option value="female">Женский</option></select></label>
+      <label class="field"><span>Рост, см</span><input id="profile-height" type="number" inputmode="numeric" min="50" max="300" step="1" required></label>
+      <p id="profile-error" class="form-error" role="alert"></p>
+    </div><div class="dialog-actions"><button class="secondary-button" type="button" data-close>Отмена</button><button id="profile-save" class="primary-button" type="submit">Сохранить</button></div>
   </form></dialog>
 
   <dialog id="import-dialog" class="sheet"><div class="dialog-header"><div><p class="eyebrow">Проверенный файл</p><h2>Резервная копия</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть"><svg class="close-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 3 21 21 M21 3 3 21"></path></svg></button></div><div id="import-summary" class="import-summary"></div><p class="muted">При совпадении ID останется запись с более новым <code>editedAt</code>.</p><div class="stack-actions"><button id="import-merge" class="secondary-button wide" type="button">Добавить к существующим</button><button id="import-replace" class="danger-button wide" type="button">Заменить все данные</button></div><p id="import-error" class="form-error" role="alert"></p></dialog>

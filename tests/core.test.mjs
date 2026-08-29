@@ -689,6 +689,18 @@ test("современные формы используют плавающие 
   assert.match(css, /html\[data-interface="modern"\] \.entry-form-dialog \.entry-form-content \{ padding: 4px 6px; \}/);
 });
 
+test("форма аккаунта использует общий каркас с фиксированными шапкой и подвалом", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const start = html.indexOf('<dialog id="profile-dialog"');
+  const end = html.indexOf("</dialog>", start);
+  const profileDialog = html.slice(start, end);
+  assert.ok(start >= 0 && end > start);
+  assert.match(profileDialog, /class="sheet form-sheet entry-form-dialog"/);
+  assert.match(profileDialog, /<div class="entry-form-content">[\s\S]+id="profile-error"[\s\S]+<\/div><div class="dialog-actions">/);
+  assert.ok(profileDialog.indexOf('class="dialog-header"') < profileDialog.indexOf('class="entry-form-content"'));
+  assert.ok(profileDialog.indexOf('class="entry-form-content"') < profileDialog.indexOf('class="dialog-actions"'));
+});
+
 test("все кнопки закрытия используют симметричный SVG-крестик", () => {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
