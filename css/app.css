@@ -194,7 +194,7 @@ dialog.form-sheet { overflow-y: auto; }
 .entry-form-dialog { --entry-dialog-padding: 22px; height: fit-content; min-height: 451px; }
 .entry-form-dialog > form {
   display: grid;
-  grid-template-rows: auto minmax(min-content, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   min-height: calc(449px - var(--entry-dialog-padding) - var(--entry-dialog-padding));
 }
 .entry-form-dialog .dialog-header, .entry-form-dialog .dialog-actions { flex: 0 0 auto; }
@@ -202,7 +202,6 @@ dialog.form-sheet { overflow-y: auto; }
 .entry-form-dialog .dialog-actions { margin-top: 0; padding-top: 18px; }
 .entry-form-dialog .field { margin-bottom: 11px; }
 .entry-form-content { flex: 0 0 auto; min-height: 0; }
-#pressure-dialog .entry-form-content { overflow: visible; }
 #headache-dialog fieldset { margin-bottom: 6px; }
 #headache-dialog #headache-end-fields { margin-bottom: 11px; }
 #headache-dialog legend { margin-bottom: 6px; }
@@ -428,7 +427,15 @@ html[data-theme="dark"] .toast { background: #eef5f2; color: #172320; }
 .import-summary .wide { grid-column: 1 / -1; }
 
 .entry-form-dialog > form { max-height: calc(100dvh - 50px - var(--safe-top) - var(--safe-bottom)); }
-.entry-form-dialog .entry-form-content { overflow-y: auto; overscroll-behavior: contain; padding-inline: 2px; }
+.entry-form-dialog .entry-form-content {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-inline: 2px;
+  scroll-padding-block: 16px;
+  -webkit-overflow-scrolling: touch;
+}
 .entry-form-dialog .dialog-actions { position: sticky; bottom: 0; background: var(--surface); }
 
 @media (max-width: 430px) {
@@ -499,8 +506,6 @@ html[data-theme="dark"] .toast { background: #eef5f2; color: #172320; }
   }
 
   .entry-form-dialog > form {
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto;
     width: 100%;
     height: 100%;
     min-height: 0;
@@ -514,15 +519,8 @@ html[data-theme="dark"] .toast { background: #eef5f2; color: #172320; }
     background: var(--surface);
   }
 
-  .entry-form-dialog .entry-form-content,
-  #pressure-dialog .entry-form-content {
-    min-height: 0;
+  .entry-form-dialog .entry-form-content {
     padding: 16px max(18px, var(--safe-right)) 12px max(18px, var(--safe-left));
-    overflow-x: hidden;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    scroll-padding-block: 16px;
-    -webkit-overflow-scrolling: touch;
   }
 
   .entry-form-dialog .dialog-actions {
@@ -1126,7 +1124,6 @@ html .unified-range-control > input[type="range"] {
   }
   .entry-form-dialog > form { height: 100%; min-height: 0; max-height: none; }
   .entry-form-dialog .dialog-header { margin-bottom: 10px; }
-  .entry-form-dialog .entry-form-content, #pressure-dialog .entry-form-content { min-height: 0; overflow-y: auto; }
   .entry-form-dialog .dialog-actions { margin-top: 0; padding-top: 10px; }
   .dialog-header { margin-bottom: 14px; }
   .dialog-actions { margin-top: 12px; }

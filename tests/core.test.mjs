@@ -674,6 +674,13 @@ test("в обоих интерфейсах дневниковые фильтры
   assert.match(landscapeCss, /\.diary-filters button \{ min-width: 0; \}/);
 });
 
+test("содержимое формы прокручивается между шапкой и подвалом в любой ориентации", () => {
+  const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
+  assert.match(css, /\.entry-form-dialog > form \{[\s\S]+grid-template-rows: auto minmax\(0, 1fr\) auto/);
+  assert.match(css, /\.entry-form-dialog \.entry-form-content \{[^}]+min-height: 0[^}]+overflow-x: hidden[^}]+overflow-y: auto[^}]+overscroll-behavior: contain/);
+  assert.doesNotMatch(css, /#pressure-dialog \.entry-form-content \{ overflow: visible; \}/);
+});
+
 test("эмодзи справочников используют обводку современных карточек", () => {
   const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
   assert.match(css, /html\[data-interface="modern"\] \.settings-icon,\s*html\[data-interface="modern"\] \.overview-icon,\s*html\[data-interface="modern"\] \.directory-choice-icon \{[^}]+border: 1px solid rgba\(255,255,255,\.62\)[^}]+box-shadow: inset 0 1px rgba\(255,255,255,\.7\)/);
