@@ -859,7 +859,33 @@ html[data-interface="modern"] .add-directory-button {
 }
 html[data-interface="modern"] dialog { border-color: rgba(255,255,255,.7); background: color-mix(in srgb, var(--surface) var(--glass-raised-opacity), transparent); box-shadow: 0 28px 70px rgba(12,42,47,.3), inset 0 1px rgba(255,255,255,.85); backdrop-filter: blur(calc(30px * var(--glass-blur-scale))) saturate(150%); -webkit-backdrop-filter: blur(calc(30px * var(--glass-blur-scale))) saturate(150%); }
 html[data-interface="modern"] dialog::backdrop { background: rgba(18,38,42,.28); backdrop-filter: blur(calc(5px * var(--glass-blur-scale))); -webkit-backdrop-filter: blur(calc(5px * var(--glass-blur-scale))); }
-html[data-interface="modern"] .entry-form-dialog .dialog-actions { background: color-mix(in srgb, var(--surface) var(--glass-raised-opacity), transparent); }
+html[data-interface="modern"] .entry-form-dialog {
+  --entry-dialog-padding: 10px;
+  --entry-dialog-chrome-gap: 10px;
+  padding: var(--entry-dialog-chrome-gap) calc(var(--entry-dialog-chrome-gap) + var(--safe-right)) calc(var(--entry-dialog-chrome-gap) + var(--safe-bottom)) calc(var(--entry-dialog-chrome-gap) + var(--safe-left));
+  overflow: hidden;
+  background: color-mix(in srgb, var(--surface-2) var(--glass-subtle-opacity), transparent);
+}
+html[data-interface="modern"] .entry-form-dialog > form { gap: var(--entry-dialog-chrome-gap); }
+html[data-interface="modern"] .entry-form-dialog .dialog-header,
+html[data-interface="modern"] .entry-form-dialog .dialog-actions {
+  position: relative;
+  bottom: auto;
+  z-index: 1;
+  margin: 0;
+  padding: 14px 16px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.68);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--surface) var(--glass-raised-opacity), transparent);
+  box-shadow: 0 12px 30px rgba(20,62,68,.16), inset 0 1px rgba(255,255,255,.82);
+  backdrop-filter: blur(calc(22px * var(--glass-blur-scale))) saturate(150%);
+  -webkit-backdrop-filter: blur(calc(22px * var(--glass-blur-scale))) saturate(150%);
+}
+html[data-interface="modern"] .entry-form-dialog .dialog-actions { padding: 12px; }
+html[data-interface="modern"] .entry-form-dialog .entry-form-content { padding: 4px 6px; }
+html[data-interface="modern"] .entry-form-dialog .dialog-header::before,
+html[data-interface="modern"] .entry-form-dialog .dialog-actions::before { content: ""; position: absolute; inset: 0 12% auto; height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.9), transparent); pointer-events: none; }
 html[data-interface="modern"] .day-label { background: color-mix(in srgb, var(--surface) var(--glass-raised-opacity), transparent); border-color: rgba(255,255,255,.62); box-shadow: 0 5px 15px rgba(28,67,72,.08); backdrop-filter: blur(calc(10px * var(--glass-blur-scale))); -webkit-backdrop-filter: blur(calc(10px * var(--glass-blur-scale))); }
 html[data-interface="modern"] .filter-scroll::after { background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--bg) 85%, transparent)); }
 html[data-interface="modern"] .settings-icon,
@@ -873,6 +899,8 @@ html[data-interface="modern"] .glass-effects-option.selected { border-color: var
   html[data-interface="modern"] .app-header,
   html[data-interface="modern"] .bottom-nav,
   html[data-interface="modern"] dialog,
+  html[data-interface="modern"] .entry-form-dialog .dialog-header,
+  html[data-interface="modern"] .entry-form-dialog .dialog-actions,
   html[data-interface="modern"] .entry-card,
   html[data-interface="modern"] .course-card,
   html[data-interface="modern"] .overview-card,
@@ -1189,4 +1217,8 @@ html .unified-range-control > input[type="range"] {
   html[data-interface="modern"] .add-button,
   html[data-interface="modern"] .profile-edit-fab { right: max(18px, calc((100vw - 820px) / 2 + 18px), var(--safe-right)); bottom: calc(96px + var(--safe-bottom)); }
   html[data-interface="modern"] .toast { bottom: calc(var(--floating-chrome-gap) + var(--safe-bottom) + var(--floating-chrome-height) + 12px); }
+  html[data-interface="modern"] .entry-form-dialog { --entry-dialog-chrome-gap: 6px; }
+  html[data-interface="modern"] .entry-form-dialog .dialog-header { padding: 8px 12px; border-radius: 16px; }
+  html[data-interface="modern"] .entry-form-dialog .dialog-actions { padding: 8px; border-radius: 16px; }
+  html[data-interface="modern"] .entry-form-dialog .entry-form-content { padding: 2px 6px; }
 }

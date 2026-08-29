@@ -681,6 +681,14 @@ test("содержимое формы прокручивается между ш
   assert.doesNotMatch(css, /#pressure-dialog \.entry-form-content \{ overflow: visible; \}/);
 });
 
+test("современные формы используют плавающие шапку и подвал без второго скролла", () => {
+  const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
+  assert.match(css, /html\[data-interface="modern"\] \.entry-form-dialog \{[^}]+--entry-dialog-chrome-gap: 10px[^}]+overflow: hidden/);
+  assert.match(css, /html\[data-interface="modern"\] \.entry-form-dialog > form \{ gap: var\(--entry-dialog-chrome-gap\); \}/);
+  assert.match(css, /html\[data-interface="modern"\] \.entry-form-dialog \.dialog-header,\s*html\[data-interface="modern"\] \.entry-form-dialog \.dialog-actions \{[^}]+position: relative[^}]+border-radius: 20px[^}]+backdrop-filter:/);
+  assert.match(css, /html\[data-interface="modern"\] \.entry-form-dialog \.entry-form-content \{ padding: 4px 6px; \}/);
+});
+
 test("эмодзи справочников используют обводку современных карточек", () => {
   const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
   assert.match(css, /html\[data-interface="modern"\] \.settings-icon,\s*html\[data-interface="modern"\] \.overview-icon,\s*html\[data-interface="modern"\] \.directory-choice-icon \{[^}]+border: 1px solid rgba\(255,255,255,\.62\)[^}]+box-shadow: inset 0 1px rgba\(255,255,255,\.7\)/);
