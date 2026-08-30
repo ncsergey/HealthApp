@@ -7,7 +7,7 @@ import { filterDataForPeriod, glucoseStats, painStats, pressureStats, pulseStats
 import { ageOnDate, calculateBmi, evaluateBmi, evaluateGlucose, evaluatePressure, evaluatePulse, isBirthdayOnDate } from "./medical.js";
 import { createElement as el, debounce, finiteInteger, makeId } from "./utils.js";
 import { DEFAULT_BODY_PARTS, UNIT_BY_ID, directoryItemById, formatMedicationAmount, formatMedicationDose, hasOngoingPainForBodyPart, normalizedNameKey, parseMedicationAmount, validateDirectoryName } from "./pain.js";
-import { DAY_PARTS, FOOD_RELATIONS, buildDaySchedule, isCourseCompletedOn, validateMedicationCourse } from "./medications.js";
+import { DAY_PARTS, FOOD_RELATIONS, buildDaySchedule, formatMedicationNameWithExpiration, isCourseCompletedOn, medicationExpirationStatus, validateMedicationCourse } from "./medications.js";
 import { DEFAULT_GLASS_BLUR_INTENSITY, DEFAULT_GLASS_EFFECTS, DEFAULT_GLASS_TRANSPARENCY, DEFAULT_THEME, MAX_GLASS_BLUR_INTENSITY, MAX_GLASS_TRANSPARENCY, MIN_GLASS_BLUR_INTENSITY, MIN_GLASS_TRANSPARENCY, applyGlassBlurIntensity, applyGlassTransparency, applyTheme, applyUiSettings, detectInitialInterface, initializeTheme, initializeUiSettings, saveTheme, saveUiSettings } from "./interface-settings.js";
 
 const PAGE_SIZE = 60;
@@ -737,9 +737,12 @@ function openDirectoryItemForm(kind, item = null, quickAdd = false) {
   document.querySelector("#directory-item-form").reset(); document.querySelector("#directory-item-error").textContent = "";
   document.querySelector("#directory-item-id").value = item?.id || "";
   document.querySelector("#directory-item-name").value = item?.name || "";
+  const expirationField = document.querySelector("#directory-item-expiration-field");
+  expirationField.hidden = kind !== "medications";
+  document.querySelector("#directory-item-expiration-date").value = kind === "medications" ? item?.expirationDate || "" : "";
   const label = kind === "bodyParts" ? "Название" : "Название препарата";
   document.querySelector("#directory-item-label").textContent = label;
-  document.querySelector("#directory-item-title").textContent = item ? "Переименовать" : kind === "bodyParts" ? "Добавить часть тела" : "Добавить препарат";
+  document.querySelector("#directory-item-title").textContent = item ? kind === "bodyParts" ? "Переименовать" : "Редактировать препарат" : kind === "bodyParts" ? "Добавить часть тела" : "Добавить препарат";
   document.querySelector("#directory-item-save").textContent = item ? "Сохранить" : "Добавить";
   openDialog("#directory-item-dialog"); document.querySelector("#directory-item-name").focus();
 }
@@ -750,9 +753,10 @@ async function saveDirectoryItemForm(event) {
   try {
     const name = validateDirectoryName(document.querySelector("#directory-item-name").value, context.kind === "bodyParts" ? "Название" : "Название препарата");
     const id = document.querySelector("#directory-item-id").value || makeId();
+    const expirationDate = context.kind === "medications" ? document.querySelector("#directory-item-expiration-date").value || null : undefined;
     const duplicate = state.data[context.kind].find((item) => item.id !== id && normalizedNameKey(item.name) === normalizedNameKey(name));
     if (duplicate) throw new Error(context.kind === "bodyParts" ? "Такая часть тела уже есть в справочнике." : "Такой препарат уже есть в справочнике.");
-    setBusy(button, true); await saveDirectoryItem(context.kind === "bodyParts" ? STORES.bodyParts : STORES.medications, { id, name, editedAt: new Date().toISOString() });
+    setBusy(button, true); await saveDirectoryItem(context.kind === "bodyParts" ? STORES.bodyParts : STORES.medications, { id, name, expirationDate, editedAt: new Date().toISOString() });
     closeDialog(document.querySelector("#directory-item-dialog")); await refreshData();
     if (context.quickAdd) {
       if (context.kind === "medications" && document.querySelector("#medication-course-dialog").open) document.querySelector("#course-medication").value = id;
@@ -773,10 +777,14 @@ async function deleteDirectoryItem(kind, item) {
 
 function directoryItems(kind) {
   const list = el("ul", { className: "directory-list" });
-  for (const item of state.data[kind]) list.append(el("li", {}, [el("span", { text: item.name }), el("div", { className: "directory-actions" }, [
+  for (const item of state.data[kind]) {
+    const status = kind === "medications" ? medicationExpirationStatus(item.expirationDate, getMoscowFields().date) : null;
+    const displayedName = status ? formatMedicationNameWithExpiration(item, getMoscowFields().date) : item.name;
+    list.append(el("li", {}, [el("span", { text: displayedName, attrs: status ? { title: status.label } : {} }), el("div", { className: "directory-actions" }, [
     el("button", { type: "button", text: "✏️", onClick: () => openDirectoryItemForm(kind, item), attrs: { "aria-label": `Изменить ${item.name}`, title: "Изменить" } }),
     el("button", { type: "button", text: "🗑️", onClick: () => deleteDirectoryItem(kind, item), attrs: { "aria-label": `Удалить ${item.name}`, title: "Удалить" } })
   ])]));
+  }
   return list;
 }
 
@@ -941,6 +949,10 @@ function renderStatistics() {
 }
 
 function medicationName(id) { return directoryItemById(state.data.medications, id)?.name || "Неизвестное лекарство"; }
+function medicationNameWithExpiration(id) {
+  const medication = directoryItemById(state.data.medications, id);
+  return formatMedicationNameWithExpiration(medication, getMoscowFields().date);
+}
 function formatLocalDate(date) { return new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", year: "numeric" }).format(new Date(`${date}T12:00:00Z`)); }
 function formatCompactLocalDate(date) { return new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", year: "numeric" }).format(new Date(`${date}T12:00:00Z`)); }
 function shiftDate(date, days) { const value = new Date(`${date}T12:00:00Z`); value.setUTCDate(value.getUTCDate() + days); return value.toISOString().slice(0, 10); }
@@ -988,8 +1000,10 @@ function medicationCourseActionButton(label, symbol, action, courseId) {
 
 function courseCard(course) {
   const completed = isCourseCompletedOn(course, getMoscowFields().date);
+  const medication = directoryItemById(state.data.medications, course.medicationId);
+  const expirationStatus = medicationExpirationStatus(medication?.expirationDate, getMoscowFields().date);
   return el("article", { className: "course-card" }, [
-    el("div", { className: "course-card-heading" }, [el("div", {}, [el("h3", { text: medicationName(course.medicationId) }), el("p", { text: `${formatMedicationDose(course.amount, course.unitId)} · ${FOOD_RELATIONS[course.foodRelation]}` })])]),
+    el("div", { className: "course-card-heading" }, [el("div", {}, [el("h3", { text: medicationNameWithExpiration(course.medicationId), attrs: { title: expirationStatus.label } }), el("p", { text: `${formatMedicationDose(course.amount, course.unitId)} · ${FOOD_RELATIONS[course.foodRelation]}` })])]),
     el("div", { className: "card-actions" }, [medicationCourseActionButton("Редактировать курс", "✏️", "edit-course", course.id), medicationCourseActionButton("Удалить курс", "🗑️", "delete-course", course.id)]),
     el("p", { className: "course-period", text: coursePeriodLabel(course) }),
     el("div", { className: "course-times" }, course.schedule.map((time) => el("span", { text: time }))),

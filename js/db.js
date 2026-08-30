@@ -32,9 +32,11 @@ function createDirectoryStore(db, name) {
   store.createIndex("editedAt", "editedAt", { unique: false });
 }
 
-function directoryRecord(id, name, editedAt = new Date().toISOString()) {
+function directoryRecord(id, name, editedAt = new Date().toISOString(), expirationDate = undefined) {
   const normalized = normalizeDirectoryName(name);
-  return { id, name: normalized, nameKey: normalizedNameKey(normalized), editedAt };
+  const record = { id, name: normalized, nameKey: normalizedNameKey(normalized), editedAt };
+  if (expirationDate !== undefined) record.expirationDate = expirationDate || null;
+  return record;
 }
 
 function migrateHeadaches(transaction) {
@@ -107,13 +109,13 @@ function normalizePainRecord(item) {
     medicationTakenAt: item.medicationTakenAt || null };
 }
 
-function normalizedDirectory(items) { return (items || []).map((item) => directoryRecord(item.id, item.name, item.editedAt)); }
+function normalizedDirectory(items, withExpirationDate = false) { return (items || []).map((item) => directoryRecord(item.id, item.name, item.editedAt, withExpirationDate ? item.expirationDate ?? null : undefined)); }
 
 export function normalizeData(data = {}) {
   const sourcePain = data.painEpisodes || data.headacheEpisodes || [];
   const legacyMedications = sourcePain.map((item) => normalizeDirectoryName(item.medication)).filter(Boolean).map((name) => directoryRecord(stableNameId("med", name), name));
   const bodyParts = normalizedDirectory(data.bodyParts?.length ? data.bodyParts : DEFAULT_BODY_PARTS);
-  const medicationsByName = new Map([...normalizedDirectory(data.medications), ...legacyMedications].map((item) => [item.nameKey, item]));
+  const medicationsByName = new Map([...normalizedDirectory(data.medications, true), ...legacyMedications].map((item) => [item.nameKey, item]));
   return { profile: data.profile || null, pressureMeasurements: data.pressureMeasurements || [],
     pulseMeasurements: (data.pulseMeasurements || []).map((item) => ({ ...item, context: item.context || "unknown", spo2: Number.isInteger(item.spo2) ? item.spo2 : null, stress: Number.isInteger(item.stress) ? item.stress : null })),
     painEpisodes: sourcePain.map(normalizePainRecord), glucoseMeasurements: data.glucoseMeasurements || [], weightMeasurements: data.weightMeasurements || [],
@@ -129,7 +131,7 @@ export async function getAllData() {
 }
 
 export async function saveRecord(storeName, record) { const db = await openDatabase(); const transaction = db.transaction(storeName, "readwrite"); transaction.objectStore(storeName).put(record); await transactionDone(transaction); return record; }
-export async function saveDirectoryItem(storeName, item) { return saveRecord(storeName, directoryRecord(item.id, item.name, item.editedAt)); }
+export async function saveDirectoryItem(storeName, item) { return saveRecord(storeName, directoryRecord(item.id, item.name, item.editedAt, storeName === STORES.medications ? item.expirationDate ?? null : undefined)); }
 export async function saveProfile(profile) { return saveRecord(STORES.profile, { ...profile, id: "profile" }); }
 export async function deleteRecord(storeName, id) { const db = await openDatabase(); const transaction = db.transaction(storeName, "readwrite"); transaction.objectStore(storeName).delete(id); await transactionDone(transaction); }
 export async function deleteMedicationCourse(id) {

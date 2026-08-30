@@ -7,6 +7,8 @@ const FOOD_RELATION_SORT_ORDER = Object.freeze({ before: 0, during: 1, after: 2,
 const LATIN_NAME_COLLATOR = new Intl.Collator("en", { sensitivity: "base", numeric: true });
 const CYRILLIC_NAME_COLLATOR = new Intl.Collator("ru", { sensitivity: "base", numeric: true });
 
+export const MEDICATION_EXPIRATION_THRESHOLDS = Object.freeze({ soonDays: 30, mediumDays: 90 });
+
 export const DAY_PARTS = Object.freeze([
   { id: "night", label: "Ночь", icon: "🌙" },
   { id: "morning", label: "Утро", icon: "🌅" },
@@ -19,6 +21,26 @@ export function isValidDateOnly(value) {
   const [year, month, day] = value.split("-").map(Number);
   const date = new Date(Date.UTC(year, month - 1, day));
   return date.getUTCFullYear() === year && date.getUTCMonth() + 1 === month && date.getUTCDate() === day;
+}
+
+function dateOnlyDayNumber(value) {
+  const [year, month, day] = value.split("-").map(Number);
+  return Math.floor(Date.UTC(year, month - 1, day) / 86_400_000);
+}
+
+export function medicationExpirationStatus(expirationDate, today) {
+  if (!expirationDate || !isValidDateOnly(expirationDate)) return { id: "unknown", emoji: "❔", label: "Срок годности не указан" };
+  if (!isValidDateOnly(today)) throw new Error("Некорректная текущая дата.");
+  const daysRemaining = dateOnlyDayNumber(expirationDate) - dateOnlyDayNumber(today);
+  if (daysRemaining < 0) return { id: "expired", emoji: "🔴", label: "Срок годности истёк", daysRemaining };
+  if (daysRemaining <= MEDICATION_EXPIRATION_THRESHOLDS.soonDays) return { id: "soon", emoji: "🟠", label: "Срок годности истекает в течение 30 дней", daysRemaining };
+  if (daysRemaining <= MEDICATION_EXPIRATION_THRESHOLDS.mediumDays) return { id: "medium", emoji: "🟡", label: "Срок годности истекает через 31–90 дней", daysRemaining };
+  return { id: "fresh", emoji: "🟢", label: "До истечения срока годности больше 90 дней", daysRemaining };
+}
+
+export function formatMedicationNameWithExpiration(medication, today) {
+  const status = medicationExpirationStatus(medication?.expirationDate, today);
+  return `${status.emoji} ${medication?.name || "Неизвестное лекарство"}`;
 }
 
 export function isValidScheduleTime(value) {

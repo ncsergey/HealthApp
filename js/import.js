@@ -36,13 +36,15 @@ function validateProfile(profile) {
   return { id: "profile", birthDate: profile.birthDate, sex: profile.sex, heightCm: profile.heightCm, editedAt: new Date(profile.editedAt).toISOString() };
 }
 
-function validateDirectory(items, label) {
+function validateDirectory(items, label, withExpirationDate = false) {
   const ids = new Set(); const names = new Set();
   return items.map((item, index) => {
     if (!item || !validId(item.id) || !validIso(item.editedAt)) throw new Error(`Некорректный элемент справочника «${label}» №${index + 1}.`);
     const name = normalizeDirectoryName(item.name); const nameKey = normalizedNameKey(name);
     if (!name || name.length > 100 || ids.has(item.id) || names.has(nameKey)) throw new Error(`Пустое или повторяющееся значение в справочнике «${label}».`);
-    ids.add(item.id); names.add(nameKey); return { id: item.id, name, nameKey, editedAt: new Date(item.editedAt).toISOString() };
+    const expirationDate = item.expirationDate ?? null;
+    if (withExpirationDate && expirationDate !== null && !isValidDateOnly(expirationDate)) throw new Error(`Некорректный срок годности в справочнике «${label}» №${index + 1}.`);
+    ids.add(item.id); names.add(nameKey); return { id: item.id, name, nameKey, editedAt: new Date(item.editedAt).toISOString(), ...(withExpirationDate ? { expirationDate } : {}) };
   });
 }
 
@@ -121,7 +123,7 @@ export async function parseBackupFile(file) {
   const legacyPressure = raw.version < 3 ? raw.pressureMeasurements.map((record, index) => { if (!integerInRange(record?.pulse, 20, 400)) throw new Error(`Числовые значения вне допустимого диапазона в записи давления №${index + 1}.`); const pressure = validatePressure(record, index); const pulse = validatePulse({ id: pressure.id, measuredAt: pressure.measuredAt, editedAt: pressure.editedAt, pulse: record.pulse, context: "unknown", comment: pressure.comment }, index); return { pressure, pulse }; }) : null;
   const medicationMap = new Map();
   const bodyParts = raw.version >= 6 ? validateDirectory(raw.bodyParts, "Части тела") : DEFAULT_BODY_PARTS.map((item) => ({ ...item, nameKey: normalizedNameKey(item.name), editedAt: new Date(0).toISOString() }));
-  let medications = raw.version >= 6 ? validateDirectory(raw.medications, "Лекарства") : [];
+  let medications = raw.version >= 6 ? validateDirectory(raw.medications, "Лекарства", true) : [];
   for (const item of medications) medicationMap.set(item.nameKey, item);
   const bodyPartIds = new Set(bodyParts.map((item) => item.id)); const medicationIds = new Set(medications.map((item) => item.id));
   const painEpisodes = raw.version >= 6 ? painSource.map((record, index) => validatePain(record, index, bodyPartIds, medicationIds)) : painSource.map((record, index) => legacyPain(record, index, raw.version, medicationMap));

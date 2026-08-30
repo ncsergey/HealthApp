@@ -7,7 +7,7 @@ import { parseBackupFile } from "../js/import.js";
 import { ageOnDate, calculateBmi, evaluateBmi, evaluateGlucose, evaluatePressure, evaluatePulse, isBirthdayOnDate } from "../js/medical.js";
 import { formatMedicationDose, hasOngoingPainForBodyPart, normalizedNameKey, parseMedicationAmount } from "../js/pain.js";
 import { filterDataForPeriod, glucoseStats, headacheStats, overviewStats, pressureStats, pulseStats, weightStats } from "../js/statistics.js";
-import { buildDaySchedule, dayPartForTime, isCourseCompletedOn, medicationStatistics, normalizeSchedule, validateMedicationCourse } from "../js/medications.js";
+import { buildDaySchedule, dayPartForTime, formatMedicationNameWithExpiration, isCourseCompletedOn, medicationExpirationStatus, medicationStatistics, normalizeSchedule, validateMedicationCourse } from "../js/medications.js";
 import { createBackupPayload } from "../js/export.js";
 import { DEFAULT_GLASS_BLUR_INTENSITY, DEFAULT_GLASS_TRANSPARENCY, DEFAULT_THEME, UI_SETTINGS_KEY, UI_THEME_KEY, applyGlassBlurIntensity, applyGlassTransparency, applyTheme, applyUiSettings, initializeTheme, initializeUiSettings, readTheme, readUiSettings, saveTheme, saveUiSettings } from "../js/interface-settings.js";
 
@@ -304,6 +304,18 @@ test("названия справочников и количество лека
   assert.throws(() => parseMedicationAmount("1000"), /0,1-999,9/);
 });
 
+test("цвет срока годности препарата учитывает границы 30 и 90 дней", () => {
+  const today = "2026-08-30";
+  assert.deepEqual(medicationExpirationStatus(null, today), { id: "unknown", emoji: "❔", label: "Срок годности не указан" });
+  assert.equal(medicationExpirationStatus("2026-08-29", today).id, "expired");
+  assert.equal(medicationExpirationStatus("2026-08-30", today).id, "soon");
+  assert.equal(medicationExpirationStatus("2026-09-29", today).id, "soon");
+  assert.equal(medicationExpirationStatus("2026-09-30", today).id, "medium");
+  assert.equal(medicationExpirationStatus("2026-11-28", today).id, "medium");
+  assert.equal(medicationExpirationStatus("2026-11-29", today).id, "fresh");
+  assert.equal(formatMedicationNameWithExpiration({ name: "Пенталгин", expirationDate: "2026-08-29" }, today), "🔴 Пенталгин");
+});
+
 test("продолжающиеся приступы ограничиваются выбранной частью тела", () => {
   const items = [{ id: "p1", bodyPartId: "body-head", endedAt: null }, { id: "p2", bodyPartId: "body-back", endedAt: null }];
   assert.equal(hasOngoingPainForBodyPart(items, "body-head"), true);
@@ -316,12 +328,13 @@ test("backup версии 6 проверяет связи боли, дозиро
     format: "health-diary-backup", version: 6, exportedAt: "2026-08-10T08:00:00Z", profile: null,
     pressureMeasurements: [], pulseMeasurements: [], glucoseMeasurements: [], weightMeasurements: [],
     bodyParts: [{ id: "body-back", name: "Спина", editedAt: "2026-08-10T05:00:00Z" }],
-    medications: [{ id: "med-1", name: "Ибупрофен", editedAt: "2026-08-10T05:00:00Z" }],
+    medications: [{ id: "med-1", name: "Ибупрофен", expirationDate: "2027-08-10", editedAt: "2026-08-10T05:00:00Z" }],
     painEpisodes: [{ id: "pain-1", bodyPartId: "body-back", startedAt: "2026-08-10T05:00:00Z", endedAt: null, intensityMin: 3, intensityMax: 7, medicationId: "med-1", medicationAmount: 1.5, medicationUnitId: "tablet", medicationTakenAt: "2026-08-10T05:30:00Z", comment: "", editedAt: "2026-08-10T06:00:00Z" }]
   };
   const parsed = await parseBackupFile({ size: 1000, text: async () => JSON.stringify(backup) });
   assert.equal(parsed.painEpisodes[0].bodyPartId, "body-back");
   assert.equal(parsed.painEpisodes[0].medicationAmount, 1.5);
+  assert.equal(parsed.medications[0].expirationDate, "2027-08-10");
   assert.deepEqual(parsed.medicationCourses, []);
   assert.deepEqual(parsed.medicationIntakes, []);
   const badUnit = structuredClone(backup); badUnit.painEpisodes[0].medicationUnitId = "custom";
@@ -332,6 +345,8 @@ test("backup версии 6 проверяет связи боли, дозиро
   assert.equal((await parseBackupFile({ size: 1000, text: async () => JSON.stringify(migratedDose) })).painEpisodes[0].medicationTakenAt, "2026-08-10T05:30:00.000Z");
   const missingPart = structuredClone(backup); missingPart.painEpisodes[0].bodyPartId = "missing";
   await assert.rejects(() => parseBackupFile({ size: 1000, text: async () => JSON.stringify(missingPart) }), /ID или даты/);
+  const invalidExpiration = structuredClone(backup); invalidExpiration.medications[0].expirationDate = "2027-02-30";
+  await assert.rejects(() => parseBackupFile({ size: 1000, text: async () => JSON.stringify(invalidExpiration) }), /срок годности/);
 });
 
 test("времена приёма распределяются по частям суток на граничных значениях", () => {
