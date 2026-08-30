@@ -29,7 +29,7 @@ function dateOnlyDayNumber(value) {
 }
 
 export function medicationExpirationStatus(expirationDate, today) {
-  if (!expirationDate || !isValidDateOnly(expirationDate)) return { id: "unknown", emoji: "❔", label: "Срок годности не указан" };
+  if (!expirationDate || !isValidDateOnly(expirationDate)) return { id: "unknown", emoji: "❓", label: "Срок годности не указан" };
   if (!isValidDateOnly(today)) throw new Error("Некорректная текущая дата.");
   const daysRemaining = dateOnlyDayNumber(expirationDate) - dateOnlyDayNumber(today);
   if (daysRemaining < 0) return { id: "expired", emoji: "🔴", label: "Срок годности истёк", daysRemaining };

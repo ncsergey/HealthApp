@@ -306,7 +306,7 @@ test("названия справочников и количество лека
 
 test("цвет срока годности препарата учитывает границы 30 и 90 дней", () => {
   const today = "2026-08-30";
-  assert.deepEqual(medicationExpirationStatus(null, today), { id: "unknown", emoji: "❔", label: "Срок годности не указан" });
+  assert.deepEqual(medicationExpirationStatus(null, today), { id: "unknown", emoji: "❓", label: "Срок годности не указан" });
   assert.equal(medicationExpirationStatus("2026-08-29", today).id, "expired");
   assert.equal(medicationExpirationStatus("2026-08-30", today).id, "soon");
   assert.equal(medicationExpirationStatus("2026-09-29", today).id, "soon");
