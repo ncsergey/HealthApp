@@ -7,7 +7,7 @@ import { filterDataForPeriod, glucoseStats, painStats, pressureStats, pulseStats
 import { ageOnDate, calculateBmi, evaluateBmi, evaluateGlucose, evaluatePressure, evaluatePulse, isBirthdayOnDate } from "./medical.js";
 import { createElement as el, debounce, finiteInteger, makeId } from "./utils.js";
 import { DEFAULT_BODY_PARTS, UNIT_BY_ID, directoryItemById, formatMedicationAmount, formatMedicationDose, hasOngoingPainForBodyPart, normalizedNameKey, parseMedicationAmount, validateDirectoryName } from "./pain.js";
-import { DAY_PARTS, FOOD_RELATIONS, buildDaySchedule, formatMedicationNameWithExpiration, isCourseCompletedOn, medicationExpirationStatus, validateMedicationCourse } from "./medications.js";
+import { DAY_PARTS, FOOD_RELATIONS, buildDaySchedule, formatMedicationExpirationRemaining, formatMedicationNameWithExpiration, isCourseCompletedOn, medicationExpirationStatus, validateMedicationCourse } from "./medications.js";
 import { DEFAULT_GLASS_BLUR_INTENSITY, DEFAULT_GLASS_EFFECTS, DEFAULT_GLASS_TRANSPARENCY, DEFAULT_THEME, MAX_GLASS_BLUR_INTENSITY, MAX_GLASS_TRANSPARENCY, MIN_GLASS_BLUR_INTENSITY, MIN_GLASS_TRANSPARENCY, applyGlassBlurIntensity, applyGlassTransparency, applyTheme, applyUiSettings, detectInitialInterface, initializeTheme, initializeUiSettings, saveTheme, saveUiSettings } from "./interface-settings.js";
 
 const PAGE_SIZE = 60;
@@ -732,6 +732,13 @@ function renderProfile() {
 
 function profileItem(label, value) { return el("div", { className: "profile-item" }, [el("dt", { text: label }), el("dd", { text: value })]); }
 
+function updateDirectoryItemExpirationRemaining() {
+  const input = document.querySelector("#directory-item-expiration-date");
+  const output = document.querySelector("#directory-item-expiration-remaining");
+  const text = formatMedicationExpirationRemaining(input.value, getMoscowFields().date);
+  output.textContent = text || ""; output.hidden = !text; output.classList.toggle("expired", text === "Срок истёк");
+}
+
 function openDirectoryItemForm(kind, item = null, quickAdd = false) {
   state.directoryContext = { kind, quickAdd };
   document.querySelector("#directory-item-form").reset(); document.querySelector("#directory-item-error").textContent = "";
@@ -740,6 +747,7 @@ function openDirectoryItemForm(kind, item = null, quickAdd = false) {
   const expirationField = document.querySelector("#directory-item-expiration-field");
   expirationField.hidden = kind !== "medications";
   document.querySelector("#directory-item-expiration-date").value = kind === "medications" ? item?.expirationDate || "" : "";
+  updateDirectoryItemExpirationRemaining();
   const label = kind === "bodyParts" ? "Название" : "Название препарата";
   document.querySelector("#directory-item-label").textContent = label;
   document.querySelector("#directory-item-title").textContent = item ? kind === "bodyParts" ? "Переименовать" : "Редактировать препарат" : kind === "bodyParts" ? "Добавить часть тела" : "Добавить препарат";
@@ -1203,7 +1211,7 @@ function bindEvents() {
   document.querySelector("#pressure-form").addEventListener("submit", savePressure); document.querySelector("#pulse-form").addEventListener("submit", savePulse); document.querySelector("#headache-form").addEventListener("submit", saveHeadache); document.querySelector("#glucose-form").addEventListener("submit", saveGlucose); document.querySelector("#weight-form").addEventListener("submit", saveWeight); document.querySelector("#profile-form").addEventListener("submit", saveProfileForm);
   document.querySelector("#headache-ongoing").addEventListener("change", () => syncHeadacheEndFields(true)); document.querySelector("#headache-variable-intensity").addEventListener("change", () => syncVariableIntensity(true)); document.querySelector("#medication").addEventListener("change", syncMedicationDateTime);
   document.querySelector("#body-part").addEventListener("change", () => { document.querySelector("#headache-error").textContent = ""; checkOngoingPain(); });
-  document.querySelector("#add-body-part").addEventListener("click", () => openDirectoryItemForm("bodyParts", null, true)); document.querySelector("#add-medication").addEventListener("click", () => openDirectoryItemForm("medications", null, true)); document.querySelector("#directory-item-form").addEventListener("submit", saveDirectoryItemForm);
+  document.querySelector("#add-body-part").addEventListener("click", () => openDirectoryItemForm("bodyParts", null, true)); document.querySelector("#add-medication").addEventListener("click", () => openDirectoryItemForm("medications", null, true)); document.querySelector("#directory-item-form").addEventListener("submit", saveDirectoryItemForm); document.querySelector("#directory-item-expiration-date").addEventListener("input", updateDirectoryItemExpirationRemaining);
   elements.directoriesBack.addEventListener("click", () => { state.activeDirectory = null; renderDirectories(); scrollPageToTop(); });
   elements.directoryAdd.addEventListener("click", () => { if (state.activeDirectory) openDirectoryItemForm(state.activeDirectory); });
   for (const input of document.querySelectorAll("#intensity, #intensity-min, #intensity-max")) { input.addEventListener("input", (event) => updateIntensityDisplay(event.currentTarget)); input.addEventListener("change", (event) => snapIntensity(event.currentTarget)); input.addEventListener("keydown", handleIntensityKeydown); } document.querySelector("#pressure-form").addEventListener("input", () => { state.pressureWarningAccepted = false; document.querySelector("#pressure-warning").hidden = true; });

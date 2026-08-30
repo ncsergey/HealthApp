@@ -45,6 +45,19 @@ export function formatMedicationNameWithExpiration(medication, today) {
   return `${status.emoji} ${medication?.name || "Неизвестное лекарство"}`;
 }
 
+function remainingDaysLabel(days) {
+  const mod100 = days % 100; const mod10 = days % 10;
+  const word = mod100 >= 11 && mod100 <= 14 ? "дней" : mod10 === 1 ? "день" : mod10 >= 2 && mod10 <= 4 ? "дня" : "дней";
+  return `${days} ${word}`;
+}
+
+export function formatMedicationExpirationRemaining(expirationDate, today) {
+  const status = medicationExpirationStatus(expirationDate, today);
+  if (status.id === "unknown") return null;
+  if (status.daysRemaining < 0) return "Срок истёк";
+  return `Осталось: ${remainingDaysLabel(status.daysRemaining)}`;
+}
+
 export function isValidScheduleTime(value) {
   return typeof value === "string" && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
 }

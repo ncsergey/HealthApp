@@ -7,7 +7,7 @@ import { parseBackupFile } from "../js/import.js";
 import { ageOnDate, calculateBmi, evaluateBmi, evaluateGlucose, evaluatePressure, evaluatePulse, isBirthdayOnDate } from "../js/medical.js";
 import { formatMedicationDose, hasOngoingPainForBodyPart, normalizedNameKey, parseMedicationAmount } from "../js/pain.js";
 import { filterDataForPeriod, glucoseStats, headacheStats, overviewStats, pressureStats, pulseStats, weightStats } from "../js/statistics.js";
-import { buildDaySchedule, dayPartForTime, formatMedicationNameWithExpiration, isCourseCompletedOn, medicationExpirationStatus, medicationStatistics, normalizeSchedule, validateMedicationCourse } from "../js/medications.js";
+import { buildDaySchedule, dayPartForTime, formatMedicationExpirationRemaining, formatMedicationNameWithExpiration, isCourseCompletedOn, medicationExpirationStatus, medicationStatistics, normalizeSchedule, validateMedicationCourse } from "../js/medications.js";
 import { createBackupPayload } from "../js/export.js";
 import { DEFAULT_GLASS_BLUR_INTENSITY, DEFAULT_GLASS_TRANSPARENCY, DEFAULT_THEME, UI_SETTINGS_KEY, UI_THEME_KEY, applyGlassBlurIntensity, applyGlassTransparency, applyTheme, applyUiSettings, initializeTheme, initializeUiSettings, readTheme, readUiSettings, saveTheme, saveUiSettings } from "../js/interface-settings.js";
 
@@ -319,6 +319,12 @@ test("цвет срока годности препарата учитывает
   assert.equal(medicationExpirationStatus("2027-08-31", today).id, "very-long");
   assert.equal(medicationExpirationStatus("2027-06-16", today).emoji, "🔵");
   assert.equal(medicationExpirationStatus("2027-09-16", today).emoji, "🟣");
+  assert.equal(formatMedicationExpirationRemaining(null, today), null);
+  assert.equal(formatMedicationExpirationRemaining("2026-08-29", today), "Срок истёк");
+  assert.equal(formatMedicationExpirationRemaining("2026-08-30", today), "Осталось: 0 дней");
+  assert.equal(formatMedicationExpirationRemaining("2026-08-31", today), "Осталось: 1 день");
+  assert.equal(formatMedicationExpirationRemaining("2026-09-01", today), "Осталось: 2 дня");
+  assert.equal(formatMedicationExpirationRemaining("2026-09-10", today), "Осталось: 11 дней");
   assert.equal(formatMedicationNameWithExpiration({ name: "Пенталгин", expirationDate: "2026-08-29" }, today), "🔴 Пенталгин");
 });
 

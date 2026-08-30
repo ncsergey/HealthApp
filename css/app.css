@@ -161,6 +161,9 @@ h3 { margin-bottom: 8px; font-size: 18px; }
 .field input, .field textarea, .field select { width: 100%; min-width: 0; max-width: 100%; min-height: 48px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text); font-size: 16px; }
 .field input[type="date"], .field input[type="time"], .field input[type="datetime-local"] { min-width: 0; max-width: 100%; height: 48px; min-height: 48px; padding-inline: 11px; }
 .field input[type="date"]::-webkit-date-and-time-value, .field input[type="time"]::-webkit-date-and-time-value, .field input[type="datetime-local"]::-webkit-date-and-time-value { min-width: 0; text-align: left; }
+.expiration-date-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: stretch; }
+.expiration-remaining { display: flex; align-items: center; min-height: 48px; padding: 8px 11px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); color: var(--muted); font-size: 13px; line-height: 1.25; white-space: nowrap; }
+.expiration-remaining.expired { color: var(--danger); }
 .field textarea { resize: none; }
 .field input:disabled { opacity: .55; }
 .field-grid { display: grid; min-width: 0; gap: 10px; }
