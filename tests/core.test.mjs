@@ -304,7 +304,7 @@ test("названия справочников и количество лека
   assert.throws(() => parseMedicationAmount("1000"), /0,1-999,9/);
 });
 
-test("цвет срока годности препарата учитывает границы 30 и 90 дней", () => {
+test("цвет срока годности препарата учитывает границы 30, 90, 180 и 365 дней", () => {
   const today = "2026-08-30";
   assert.deepEqual(medicationExpirationStatus(null, today), { id: "unknown", emoji: "❓", label: "Срок годности не указан" });
   assert.equal(medicationExpirationStatus("2026-08-29", today).id, "expired");
@@ -313,6 +313,12 @@ test("цвет срока годности препарата учитывает
   assert.equal(medicationExpirationStatus("2026-09-30", today).id, "medium");
   assert.equal(medicationExpirationStatus("2026-11-28", today).id, "medium");
   assert.equal(medicationExpirationStatus("2026-11-29", today).id, "fresh");
+  assert.equal(medicationExpirationStatus("2027-02-26", today).id, "fresh");
+  assert.equal(medicationExpirationStatus("2027-02-27", today).id, "long");
+  assert.equal(medicationExpirationStatus("2027-08-30", today).id, "long");
+  assert.equal(medicationExpirationStatus("2027-08-31", today).id, "very-long");
+  assert.equal(medicationExpirationStatus("2027-06-16", today).emoji, "🔵");
+  assert.equal(medicationExpirationStatus("2027-09-16", today).emoji, "🟣");
   assert.equal(formatMedicationNameWithExpiration({ name: "Пенталгин", expirationDate: "2026-08-29" }, today), "🔴 Пенталгин");
 });
 

@@ -7,7 +7,7 @@ const FOOD_RELATION_SORT_ORDER = Object.freeze({ before: 0, during: 1, after: 2,
 const LATIN_NAME_COLLATOR = new Intl.Collator("en", { sensitivity: "base", numeric: true });
 const CYRILLIC_NAME_COLLATOR = new Intl.Collator("ru", { sensitivity: "base", numeric: true });
 
-export const MEDICATION_EXPIRATION_THRESHOLDS = Object.freeze({ soonDays: 30, mediumDays: 90 });
+export const MEDICATION_EXPIRATION_THRESHOLDS = Object.freeze({ soonDays: 30, mediumDays: 90, comfortableDays: 180, yearDays: 365 });
 
 export const DAY_PARTS = Object.freeze([
   { id: "night", label: "Ночь", icon: "🌙" },
@@ -35,7 +35,9 @@ export function medicationExpirationStatus(expirationDate, today) {
   if (daysRemaining < 0) return { id: "expired", emoji: "🔴", label: "Срок годности истёк", daysRemaining };
   if (daysRemaining <= MEDICATION_EXPIRATION_THRESHOLDS.soonDays) return { id: "soon", emoji: "🟠", label: "Срок годности истекает в течение 30 дней", daysRemaining };
   if (daysRemaining <= MEDICATION_EXPIRATION_THRESHOLDS.mediumDays) return { id: "medium", emoji: "🟡", label: "Срок годности истекает через 31–90 дней", daysRemaining };
-  return { id: "fresh", emoji: "🟢", label: "До истечения срока годности больше 90 дней", daysRemaining };
+  if (daysRemaining <= MEDICATION_EXPIRATION_THRESHOLDS.comfortableDays) return { id: "fresh", emoji: "🟢", label: "До истечения срока годности 91–180 дней", daysRemaining };
+  if (daysRemaining <= MEDICATION_EXPIRATION_THRESHOLDS.yearDays) return { id: "long", emoji: "🔵", label: "До истечения срока годности 181–365 дней", daysRemaining };
+  return { id: "very-long", emoji: "🟣", label: "До истечения срока годности больше года", daysRemaining };
 }
 
 export function formatMedicationNameWithExpiration(medication, today) {
