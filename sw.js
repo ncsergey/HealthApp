@@ -1,4 +1,4 @@
-const CACHE_NAME = "health-app-static-v160"; // Версия также отображается в шапке приложения.
+const CACHE_NAME = "health-app-static-v161"; // Версия также отображается в шапке приложения.
 const CACHE_PREFIX = "health-app-static-";
 const APP_SHELL = [
   "./",

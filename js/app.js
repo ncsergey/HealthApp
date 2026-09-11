@@ -381,7 +381,8 @@ function updateBirthdayBrand() {
 }
 function formatGlucose(value) { return Number(value).toFixed(1).replace(".", ","); }
 function formatOneDecimal(value) { return Number.isFinite(value) ? Number(value).toFixed(1).replace(".", ",") : "—"; }
-function formatSigned(value, unit = "") { if (!Number.isFinite(value)) return "—"; return `${value > 0 ? "+" : ""}${String(value).replace(".", ",")}${unit}`; }
+function formatMetricOneDecimal(value) { return Number.isFinite(value) ? Number(value).toFixed(1) : "—"; }
+function formatSigned(value, unit = "") { if (!Number.isFinite(value)) return "—"; return `${value > 0 ? "+" : ""}${formatMetricOneDecimal(value)}${unit}`; }
 function formatDateOnly(value) { return /^\d{4}-\d{2}-\d{2}$/.test(value || "") ? value.split("-").reverse().join(".") : "—"; }
 function recordCountLabel(count) { const mod100 = count % 100; const mod10 = count % 10; const word = mod100 >= 11 && mod100 <= 14 ? "записей" : mod10 === 1 ? "запись" : mod10 >= 2 && mod10 <= 4 ? "записи" : "записей"; return `${count} ${word}`; }
 function directoryCountLabel(count) { const mod100 = count % 100; const mod10 = count % 10; const word = mod100 >= 11 && mod100 <= 14 ? "элементов" : mod10 === 1 ? "элемент" : mod10 >= 2 && mod10 <= 4 ? "элемента" : "элементов"; return `${count} ${word}`; }
@@ -390,7 +391,7 @@ function evaluatePulseRecord(record) { const context = record.context || "unknow
 function validateWeightInput(value) {
   const raw = String(value).trim();
   const weight = Number(raw.replace(",", "."));
-  if (!raw || !Number.isFinite(weight) || !Number.isInteger(weight) || weight < 1 || weight > 700) return { error: "Допустимое значение веса: 1-700" };
+  if (!/^\d+(?:[.,]\d)?$/.test(raw) || !Number.isFinite(weight) || weight < 1 || weight > 700) return { error: "Допустимое значение веса: 1–700 кг, один знак после точки" };
   return { weight };
 }
 
@@ -487,7 +488,7 @@ function weightCard(record) {
   const status = evaluateBmi({ bmi, age: profileAge() });
   const main = el("div", { className: "entry-main" }, [
     el("div", { className: "entry-type" }, [el("span", { className: "entry-emoji", text: "⚖️", attrs: { "aria-hidden": "true" } }), document.createTextNode("Вес")]),
-    el("div", { className: "entry-value", text: `${record.weight} кг` }), el("p", { className: "entry-detail", text: previous ? `Изменение ${formatSigned(record.weight - previous.weight, " кг")}` : "Первое измерение" }), statusChip(status, true)
+    el("div", { className: "entry-value", text: `${formatMetricOneDecimal(record.weight)} кг` }), el("p", { className: "entry-detail", text: previous ? `Изменение ${formatSigned(record.weight - previous.weight, " кг")}` : "Первое измерение" }), statusChip(status, true)
   ]);
   if (record.comment) main.append(el("p", { className: "entry-comment", text: record.comment }));
   return entryShell("weight", record, main, "измерение веса");
@@ -558,7 +559,7 @@ function openGlucoseForm(record = null) {
 
 function openWeightForm(record = null) {
   document.querySelector("#weight-form").reset(); document.querySelector("#weight-error").textContent = ""; document.querySelector("#weight-id").value = record?.id || ""; document.querySelector("#weight-form-title").textContent = record ? "Редактировать измерение" : "Новое измерение"; fillMeasurementForm("weight", record);
-  if (record) { document.querySelector("#weight-value").value = record.weight; document.querySelector("#weight-comment").value = record.comment; }
+  if (record) { document.querySelector("#weight-value").value = formatMetricOneDecimal(record.weight); document.querySelector("#weight-comment").value = record.comment; }
   openDialog("#weight-dialog");
 }
 
@@ -742,16 +743,16 @@ function openProfileForm() {
   const profile = state.data.profile; document.querySelector("#profile-form").reset(); document.querySelector("#profile-error").textContent = "";
   document.querySelector("#profile-form-title").textContent = profile ? "Редактировать данные" : "Заполнить данные";
   document.querySelector("#profile-birth-date").max = new Date().toISOString().slice(0, 10);
-  if (profile) { document.querySelector("#profile-birth-date").value = profile.birthDate; document.querySelector("#profile-sex").value = profile.sex; document.querySelector("#profile-height").value = profile.heightCm; }
+  if (profile) { document.querySelector("#profile-birth-date").value = profile.birthDate; document.querySelector("#profile-sex").value = profile.sex; document.querySelector("#profile-height").value = formatMetricOneDecimal(profile.heightCm); }
   openDialog("#profile-dialog");
 }
 
 async function saveProfileForm(event) {
   event.preventDefault(); const button = document.querySelector("#profile-save"); const errorNode = document.querySelector("#profile-error"); errorNode.textContent = "";
-  const birthDate = document.querySelector("#profile-birth-date").value; const sex = document.querySelector("#profile-sex").value; const heightCm = finiteInteger(document.querySelector("#profile-height").value);
+  const birthDate = document.querySelector("#profile-birth-date").value; const sex = document.querySelector("#profile-sex").value; const heightRaw = document.querySelector("#profile-height").value.trim(); const heightCm = Number(heightRaw.replace(",", "."));
   if (!validBirthDate(birthDate)) { errorNode.textContent = "Укажите реальную дату рождения, не позднее сегодняшней."; return; }
   if (!['male', 'female'].includes(sex)) { errorNode.textContent = "Выберите пол."; return; }
-  if (heightCm === null || heightCm < 50 || heightCm > 300) { errorNode.textContent = "Рост должен быть целым числом от 50 до 300 см."; return; }
+  if (!/^\d+(?:[.,]\d)?$/.test(heightRaw) || !Number.isFinite(heightCm) || heightCm < 50 || heightCm > 300) { errorNode.textContent = "Рост должен быть от 50 до 300 см с одним знаком после точки."; return; }
   try {
     setBusy(button, true); const editedAt = new Date().toISOString(); const profile = { id: "profile", birthDate, sex, heightCm, editedAt };
     await saveProfile(profile);
@@ -766,8 +767,8 @@ function renderProfile() {
     card.append(el("button", { className: "primary-button profile-edit-button", type: "button", text: "Заполнить данные", onClick: openProfileForm })); elements.profileContent.append(card); return;
   }
   const current = newestWeight(); const bmi = current ? calculateBmi(current.weight, profile.heightCm) : null;
-  const items = [profileItem("Дата рождения", formatDateOnly(profile.birthDate)), profileItem("Возраст", ageLabel(profileAge())), profileItem("Пол", profile.sex === "male" ? "мужской" : "женский"), profileItem("Рост", `${profile.heightCm} см`)];
-  if (current) items.push(profileItem("Текущий вес", `${current.weight} кг`), profileItem("ИМТ", formatOneDecimal(bmi)));
+  const items = [profileItem("Дата рождения", formatDateOnly(profile.birthDate)), profileItem("Возраст", ageLabel(profileAge())), profileItem("Пол", profile.sex === "male" ? "мужской" : "женский"), profileItem("Рост", `${formatMetricOneDecimal(profile.heightCm)} см`)];
+  if (current) items.push(profileItem("Текущий вес", `${formatMetricOneDecimal(current.weight)} кг`), profileItem("ИМТ", formatOneDecimal(bmi)));
   const grid = el("dl", { className: "profile-grid" }, items);
   const editButton = el("button", { className: "profile-edit-fab", type: "button", onClick: openProfileForm, attrs: { "aria-label": "Редактировать данные" } }, [el("span", { text: "✏️", attrs: { "aria-hidden": "true" } })]);
   elements.profileContent.append(grid, editButton);
@@ -928,7 +929,7 @@ function renderOverview(bounds) {
     overviewCard("pressure", "🩺", "Давление", p ? `${p.avgSystolic} / ${p.avgDiastolic}` : "—", filtered.pressureMeasurements.length),
     overviewCard("pulse", "💓", "Пульс", q ? `${q.average} уд/мин` : "—", filtered.pulseMeasurements.length, q && pulseContexts.size === 1 ? PULSE_CONTEXT[[...pulseContexts][0]].toLowerCase() : q ? "смешанные контексты" : ""),
     overviewCard("glucose", "🩸", "Глюкоза", glucoseValue, filtered.glucoseMeasurements.length, glucoseNote),
-    overviewCard("weight", "⚖️", "Вес", w ? `${w.current.weight} кг` : "—", filtered.weightMeasurements.length)
+    overviewCard("weight", "⚖️", "Вес", w ? `${formatMetricOneDecimal(w.current.weight)} кг` : "—", filtered.weightMeasurements.length)
   ]));
 }
 
@@ -982,7 +983,7 @@ function renderWeightStatistics(bounds) {
   const items = filterDataForPeriod(state.data, bounds).weightMeasurements; const stats = weightStats(items); detailHeading("Вес");
   if (!stats) { elements.statsContent.append(emptyState("За выбранный период данных нет", "Добавьте измерения или выберите другой период.", "📊")); return; }
   const bmi = calculateBmi(stats.current.weight, state.data.profile?.heightCm);
-  elements.statsContent.append(el("div", { className: "stats-grid" }, [statCard("Текущий вес", `${stats.current.weight} кг`), statCard("Изменение за период", formatSigned(stats.change, " кг")), statCard("Минимум / максимум", `${stats.min} / ${stats.max} кг`), statCard("Текущий ИМТ", formatOneDecimal(bmi))]));
+  elements.statsContent.append(el("div", { className: "stats-grid" }, [statCard("Текущий вес", `${formatMetricOneDecimal(stats.current.weight)} кг`), statCard("Изменение за период", formatSigned(stats.change, " кг")), statCard("Минимум / максимум", `${formatMetricOneDecimal(stats.min)} / ${formatMetricOneDecimal(stats.max)} кг`), statCard("Текущий ИМТ", formatOneDecimal(bmi))]));
   elements.statsContent.append(chart("Вес во времени", "График веса", items, [{ value: (item) => item.weight, color: "--weight", fallback: "#2e8b69" }]));
   if (state.data.profile?.heightCm) elements.statsContent.append(chart("ИМТ во времени", "График индекса массы тела", items, [{ value: (item) => calculateBmi(item.weight, state.data.profile.heightCm), color: "--primary", fallback: "#167b68" }]));
 }

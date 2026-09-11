@@ -276,20 +276,34 @@ test("backup версии 5 проверяет диапазон интенсив
   await assert.rejects(() => parseBackupFile({ size: 1000, text: async () => JSON.stringify(earlyMedication) }), /раньше начала/);
 });
 
-test("backup версии 4 проверяет профиль, глюкозу и вес", async () => {
+test("backup версии 4 проверяет профиль, глюкозу и вес с одним десятичным знаком", async () => {
   const backup = {
-    format: "health-diary-backup", version: 4, exportedAt: "2026-08-10T06:00:00Z", profile: { id: "profile", birthDate: "1990-05-20", sex: "male", heightCm: 180, editedAt: "2026-08-10T05:00:00Z" },
+    format: "health-diary-backup", version: 4, exportedAt: "2026-08-10T06:00:00Z", profile: { id: "profile", birthDate: "1990-05-20", sex: "male", heightCm: 180.5, editedAt: "2026-08-10T05:00:00Z" },
     pressureMeasurements: [], pulseMeasurements: [], headacheEpisodes: [],
     glucoseMeasurements: [{ id: "g1", measuredAt: "2026-08-10T05:30:00Z", editedAt: "2026-08-10T05:31:00Z", value: 5.6, format: "plasma", context: "fasting", comment: "" }],
-    weightMeasurements: [{ id: "w1", measuredAt: "2026-08-10T05:30:00Z", editedAt: "2026-08-10T05:31:00Z", weight: 80, comment: "" }]
+    weightMeasurements: [{ id: "w1", measuredAt: "2026-08-10T05:30:00Z", editedAt: "2026-08-10T05:31:00Z", weight: 80.5, comment: "" }]
   };
   const parsed = await parseBackupFile({ size: 1000, text: async () => JSON.stringify(backup) });
-  assert.equal(parsed.profile.heightCm, 180);
+  assert.equal(parsed.profile.heightCm, 180.5);
   assert.equal(glucoseStats(parsed.glucoseMeasurements).average, 5.6);
-  assert.equal(parsed.weightMeasurements[0].weight, 80);
+  assert.equal(parsed.weightMeasurements[0].weight, 80.5);
 
   const invalid = structuredClone(backup); invalid.profile.birthDate = "2999-01-01";
   await assert.rejects(() => parseBackupFile({ size: 1000, text: async () => JSON.stringify(invalid) }), /дата рождения/);
+  const preciseHeight = structuredClone(backup); preciseHeight.profile.heightCm = 180.55;
+  await assert.rejects(() => parseBackupFile({ size: 1000, text: async () => JSON.stringify(preciseHeight) }), /одного знака/);
+  const preciseWeight = structuredClone(backup); preciseWeight.weightMeasurements[0].weight = 80.55;
+  await assert.rejects(() => parseBackupFile({ size: 1000, text: async () => JSON.stringify(preciseWeight) }), /одного знака/);
+});
+
+test("рост и вес вводятся и отображаются с одним десятичным знаком", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
+  assert.match(html, /id="weight-value"[^>]+inputmode="decimal"[^>]+step="0\.1"/);
+  assert.match(html, /id="profile-height"[^>]+inputmode="decimal"[^>]+step="0\.1"/);
+  assert.match(app, /function formatMetricOneDecimal\(value\) \{ return Number\.isFinite\(value\) \? Number\(value\)\.toFixed\(1\) : "—"; \}/);
+  assert.match(app, /formatMetricOneDecimal\(profile\.heightCm\)[\s\S]+formatMetricOneDecimal\(current\.weight\)/);
+  assert.match(app, /formatMetricOneDecimal\(stats\.current\.weight\)[\s\S]+formatMetricOneDecimal\(stats\.min\)[\s\S]+formatMetricOneDecimal\(stats\.max\)/);
 });
 
 test("названия справочников и количество лекарства нормализуются", () => {
