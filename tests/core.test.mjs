@@ -777,6 +777,18 @@ test("PWA разрешает портретную и альбомную орие
   assert.equal(manifest.orientation, "any");
 });
 
+test("вложенные экраны и диалоги участвуют в системной истории", () => {
+  const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
+  assert.match(app, /const ROOT_VIEWS = new Set\(\["diary", "stats", "medications", "directories"\]\)/);
+  assert.match(app, /function pushNavigationEntry\(\) \{ history\.pushState/);
+  assert.match(app, /window\.addEventListener\("popstate", handleNavigationPop\)/);
+  assert.match(app, /function openDirectory\(kind\)[\s\S]+pushNavigationEntry\(\)/);
+  assert.match(app, /state\.statsMetric = card\.dataset\.metric; renderStatistics\(\); scrollPageToTop\(\); pushNavigationEntry\(\)/);
+  assert.match(app, /elements\.directoriesBack\.addEventListener\("click", navigateBack\)/);
+  assert.match(app, /elements\.statsBack\.addEventListener\("click", navigateBack\)/);
+  assert.match(app, /dialog\.addEventListener\("cancel", \(event\) => \{ event\.preventDefault\(\); closeDialog\(dialog\); \}\)/);
+});
+
 test("ползунки боли используют общий компонент и насыщенный градиент", () => {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");

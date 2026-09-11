@@ -21,9 +21,16 @@ const PULSE_CONTEXT = Object.freeze({ resting: "В покое", active: "Пос�
 const COLLECTION_BY_KIND = Object.freeze({ pressure: "pressureMeasurements", pulse: "pulseMeasurements", pain: "painEpisodes", glucose: "glucoseMeasurements", weight: "weightMeasurements" });
 const STORE_BY_KIND = Object.freeze({ pressure: STORES.pressure, pulse: STORES.pulse, pain: STORES.pain, glucose: STORES.glucose, weight: STORES.weight });
 const DIRECTORY_META = Object.freeze({ bodyParts: { title: "Части тела", icon: "🧍" }, medications: { title: "Препараты", icon: "💊" } });
+const APP_NAVIGATION_KEY = "myhealthNavigation";
+const ROOT_VIEWS = new Set(["diary", "stats", "medications", "directories"]);
+const SETTINGS_CHILD_VIEWS = new Set(["profile", "interface", "backup"]);
 let backupPendingFallback = false;
 let backupReminderDismissedFallback = false;
 let modalScrollY = 0;
+let applyingNavigationState = false;
+let pendingRootView = null;
+let pendingNavigationPromise = null;
+let resolvePendingNavigation = null;
 let confirmedPortraitSafeTop = null;
 let portraitSafeTopCandidate = null;
 let portraitSafeTopCandidateCount = 0;
@@ -44,7 +51,7 @@ const state = {
   data: { profile: null, pressureMeasurements: [], pulseMeasurements: [], painEpisodes: [], glucoseMeasurements: [], weightMeasurements: [], bodyParts: [], medications: [], medicationCourses: [], medicationIntakes: [] },
   diaryFilter: "all", diaryLimit: PAGE_SIZE, statsMetric: "overview", pendingImport: null,
   pressureWarningAccepted: false, chartObservers: [], glucoseContext: "all", glucoseFormat: "all", painBodyPart: "all", directoryContext: null, activeDirectory: null,
-  medicationTab: "today", medicationDate: getMoscowFields().date, uiSettings: initialUiSettings, theme: initialTheme
+  medicationTab: "today", medicationDate: getMoscowFields().date, activeView: "diary", dialogStack: [], uiSettings: initialUiSettings, theme: initialTheme
 };
 
 const elements = {
@@ -303,20 +310,66 @@ function ensureFocusedEntryFieldVisible() {
   else if (targetBounds.top < scrollerBounds.top + 12) scroller.scrollBy({ top: targetBounds.top - scrollerBounds.top - 16, behavior: "auto" });
 }
 
-function closeDialog(dialog) { if (dialog?.open) { dialog.close(); queueMicrotask(syncModalState); } }
+function navigationState() {
+  const value = history.state?.[APP_NAVIGATION_KEY];
+  return value?.version === 1 && Number.isInteger(value.depth) && value.depth >= 0 ? value : null;
+}
+
+function navigationSnapshot(depth = navigationState()?.depth || 0) {
+  return {
+    [APP_NAVIGATION_KEY]: {
+      version: 1,
+      depth,
+      view: state.activeView,
+      directory: state.activeView === "directories" ? state.activeDirectory : null,
+      statsMetric: state.activeView === "stats" ? state.statsMetric : "overview",
+      dialogs: [...state.dialogStack]
+    }
+  };
+}
+
+function replaceNavigationEntry(depth = navigationState()?.depth || 0) { history.replaceState(navigationSnapshot(depth), ""); }
+function pushNavigationEntry() { history.pushState(navigationSnapshot((navigationState()?.depth || 0) + 1), ""); }
+
+function hideDialog(dialog) {
+  if (!dialog?.open) return;
+  state.dialogStack = state.dialogStack.filter((id) => id !== dialog.id);
+  dialog.close();
+  queueMicrotask(syncModalState);
+}
+
+function closeDialog(dialog) {
+  if (!dialog?.open) return Promise.resolve(false);
+  const current = navigationState();
+  if (!applyingNavigationState && current?.depth > 0 && current.dialogs?.at(-1) === dialog.id) return navigateBack();
+  hideDialog(dialog);
+  if (!applyingNavigationState && current) replaceNavigationEntry(current.depth);
+  return Promise.resolve(true);
+}
+
 function openDialog(selector) {
   const dialog = document.querySelector(selector);
   if (!dialog.open) {
     const entryContent = dialog.matches(".entry-form-dialog") ? dialog.querySelector(".entry-form-content") : null;
     dialog.showModal();
+    state.dialogStack = [...state.dialogStack.filter((id) => id !== dialog.id), dialog.id];
     if (entryContent) {
       entryContent.scrollTop = 0;
       dialog.querySelector(".close-button")?.focus({ preventScroll: true });
       requestAnimationFrame(() => { entryContent.scrollTop = 0; });
     }
     syncModalState();
+    if (!applyingNavigationState) pushNavigationEntry();
   }
   return dialog;
+}
+
+function replaceDialog(dialog, openReplacement) {
+  const depth = navigationState()?.depth || 0;
+  applyingNavigationState = true;
+  try { hideDialog(dialog); openReplacement(); }
+  finally { applyingNavigationState = false; }
+  replaceNavigationEntry(depth);
 }
 
 function setBusy(button, busy, busyLabel = "Сохранение…") {
@@ -639,7 +692,7 @@ async function savePressure(event) {
   if (values.systolic <= values.diastolic && !state.pressureWarningAccepted) { const warning = document.querySelector("#pressure-warning"); warning.textContent = "Значение выглядит необычным. Проверьте ввод и нажмите «Сохранить» ещё раз, если всё верно."; warning.hidden = false; state.pressureWarningAccepted = true; return; }
   try {
     const record = { id: document.querySelector("#pressure-id").value || makeId(), measuredAt: measurementTimestamp("pressure"), editedAt: new Date().toISOString(), ...values, comment: document.querySelector("#pressure-comment").value.trim() };
-    setBusy(button, true); await saveRecord(STORES.pressure, record); closeDialog(document.querySelector("#pressure-dialog")); await refreshData(); handleSuccessfulDataChange("Измерение сохранено");
+    setBusy(button, true); await saveRecord(STORES.pressure, record); await closeDialog(document.querySelector("#pressure-dialog")); await refreshData(); handleSuccessfulDataChange("Измерение сохранено");
   } catch (error) { showError(errorNode, error); } finally { setBusy(button, false); }
 }
 
@@ -652,7 +705,7 @@ async function savePulse(event) {
   try {
     const spo2 = optionalPercent("#pulse-spo2", "Допустимое значение SpO2: 1-100", 1); const stress = optionalPercent("#pulse-stress", "Допустимое значение стресса: 0-100", 0);
     const record = { id: document.querySelector("#pulse-id").value || makeId(), measuredAt: measurementTimestamp("pulse"), editedAt: new Date().toISOString(), pulse, context, spo2, stress, comment: document.querySelector("#pulse-comment").value.trim() };
-    setBusy(button, true); await saveRecord(STORES.pulse, record); closeDialog(document.querySelector("#pulse-dialog")); await refreshData(); handleSuccessfulDataChange("Пульс сохранён");
+    setBusy(button, true); await saveRecord(STORES.pulse, record); await closeDialog(document.querySelector("#pulse-dialog")); await refreshData(); handleSuccessfulDataChange("Пульс сохранён");
   } catch (error) { showError(errorNode, error); } finally { setBusy(button, false); }
 }
 
@@ -663,7 +716,7 @@ async function saveGlucose(event) {
   const value = Number(raw.replace(",", ".")); if (value < 1 || value > 40) { errorNode.textContent = "Допустимое значение глюкозы: 1,0-40,0"; return; }
   try {
     const record = { id: document.querySelector("#glucose-id").value || makeId(), measuredAt: measurementTimestamp("glucose"), editedAt: new Date().toISOString(), value, format: document.querySelector("#glucose-format").value, context: document.querySelector("#glucose-context").value, comment: document.querySelector("#glucose-comment").value.trim() };
-    setBusy(button, true); await saveRecord(STORES.glucose, record); closeDialog(document.querySelector("#glucose-dialog")); await refreshData(); handleSuccessfulDataChange("Глюкоза сохранена");
+    setBusy(button, true); await saveRecord(STORES.glucose, record); await closeDialog(document.querySelector("#glucose-dialog")); await refreshData(); handleSuccessfulDataChange("Глюкоза сохранена");
   } catch (error) { showError(errorNode, error); } finally { setBusy(button, false); }
 }
 
@@ -672,7 +725,7 @@ async function saveWeight(event) {
   const weightResult = validateWeightInput(document.querySelector("#weight-value").value); if (weightResult.error) { errorNode.textContent = weightResult.error; return; } const { weight } = weightResult;
   try {
     const record = { id: document.querySelector("#weight-id").value || makeId(), measuredAt: measurementTimestamp("weight"), editedAt: new Date().toISOString(), weight, comment: document.querySelector("#weight-comment").value.trim() };
-    setBusy(button, true); await saveRecord(STORES.weight, record); closeDialog(document.querySelector("#weight-dialog")); await refreshData(); handleSuccessfulDataChange("Вес сохранён");
+    setBusy(button, true); await saveRecord(STORES.weight, record); await closeDialog(document.querySelector("#weight-dialog")); await refreshData(); handleSuccessfulDataChange("Вес сохранён");
   } catch (error) { showError(errorNode, error); } finally { setBusy(button, false); }
 }
 
@@ -684,7 +737,7 @@ async function saveHeadache(event) {
     const period = readHeadachePeriod(); const intensity = readIntensityRange(); const medication = readMedication(period.startedAt);
     const record = { id: document.querySelector("#headache-id").value || makeId(), bodyPartId: bodyPart.id, ...period, ...intensity, ...medication, editedAt: new Date().toISOString(), comment: document.querySelector("#headache-comment").value.trim() };
     if (hasOngoingPainForBodyPart(state.data.painEpisodes, bodyPart.id, record.id)) throw new Error(`Приступ боли в области «${bodyPart.name}» уже продолжается. Завершите его через редактирование записи.`);
-    setBusy(button, true); await saveRecord(STORES.pain, record); closeDialog(document.querySelector("#headache-dialog")); await refreshData(); handleSuccessfulDataChange("Эпизод боли сохранён");
+    setBusy(button, true); await saveRecord(STORES.pain, record); await closeDialog(document.querySelector("#headache-dialog")); await refreshData(); handleSuccessfulDataChange("Эпизод боли сохранён");
   } catch (error) { showError(errorNode, error); } finally { setBusy(button, false); }
 }
 
@@ -711,7 +764,7 @@ async function saveProfileForm(event) {
   try {
     setBusy(button, true); const editedAt = new Date().toISOString(); const profile = { id: "profile", birthDate, sex, heightCm, editedAt };
     await saveProfile(profile);
-    closeDialog(document.querySelector("#profile-dialog")); await refreshData(); updateBirthdayBrand(); handleSuccessfulDataChange("Данные сохранены");
+    await closeDialog(document.querySelector("#profile-dialog")); await refreshData(); updateBirthdayBrand(); handleSuccessfulDataChange("Данные сохранены");
   } catch (error) { showError(errorNode, error); } finally { setBusy(button, false); }
 }
 
@@ -765,7 +818,7 @@ async function saveDirectoryItemForm(event) {
     const duplicate = state.data[context.kind].find((item) => item.id !== id && normalizedNameKey(item.name) === normalizedNameKey(name));
     if (duplicate) throw new Error(context.kind === "bodyParts" ? "Такая часть тела уже есть в справочнике." : "Такой препарат уже есть в справочнике.");
     setBusy(button, true); await saveDirectoryItem(context.kind === "bodyParts" ? STORES.bodyParts : STORES.medications, { id, name, expirationDate, editedAt: new Date().toISOString() });
-    closeDialog(document.querySelector("#directory-item-dialog")); await refreshData();
+    await closeDialog(document.querySelector("#directory-item-dialog")); await refreshData();
     if (context.quickAdd) {
       if (context.kind === "medications" && document.querySelector("#medication-course-dialog").open) document.querySelector("#course-medication").value = id;
       else { document.querySelector(context.kind === "bodyParts" ? "#body-part" : "#medication").value = id; if (context.kind === "medications") syncMedicationDateTime(); }
@@ -796,7 +849,11 @@ function directoryItems(kind) {
   return list;
 }
 
-function openDirectory(kind) { if (!DIRECTORY_META[kind]) return; state.activeDirectory = kind; renderDirectories(); scrollPageToTop(); }
+function openDirectory(kind) {
+  if (!DIRECTORY_META[kind] || state.activeDirectory === kind) return;
+  state.activeDirectory = kind; renderDirectories(); scrollPageToTop();
+  if (!applyingNavigationState) pushNavigationEntry();
+}
 
 function renderDirectories() {
   if (!elements.directoriesContent) return;
@@ -820,9 +877,16 @@ function renderDirectories() {
 function confirmAction({ title, message, confirmLabel = "Подтвердить", confirmClass = "danger-button" }) {
   const dialog = document.querySelector("#confirm-dialog"); const confirmButton = document.querySelector("#confirm-ok"); document.querySelector("#confirm-title").textContent = title; document.querySelector("#confirm-message").textContent = message; confirmButton.textContent = confirmLabel; confirmButton.className = confirmClass; openDialog("#confirm-dialog");
   return new Promise((resolve) => {
-    const finish = (value) => { document.querySelector("#confirm-ok").removeEventListener("click", ok); document.querySelector("#confirm-cancel").removeEventListener("click", cancel); dialog.removeEventListener("cancel", cancelEvent); closeDialog(dialog); resolve(value); };
-    const ok = () => finish(true); const cancel = () => finish(false); const cancelEvent = (event) => { event.preventDefault(); finish(false); };
-    document.querySelector("#confirm-ok").addEventListener("click", ok); document.querySelector("#confirm-cancel").addEventListener("click", cancel); dialog.addEventListener("cancel", cancelEvent);
+    let settled = false;
+    const finish = (value, shouldClose = true) => {
+      if (settled) return;
+      settled = true;
+      document.querySelector("#confirm-ok").removeEventListener("click", ok); document.querySelector("#confirm-cancel").removeEventListener("click", cancel); dialog.removeEventListener("close", closed);
+      if (shouldClose) closeDialog(dialog).then(() => resolve(value));
+      else resolve(value);
+    };
+    const ok = () => finish(true); const cancel = () => finish(false); const closed = () => finish(false, false);
+    document.querySelector("#confirm-ok").addEventListener("click", ok); document.querySelector("#confirm-cancel").addEventListener("click", cancel); dialog.addEventListener("close", closed);
   });
 }
 
@@ -1077,7 +1141,7 @@ async function saveMedicationCourse(event) {
     const record = validateMedicationCourse({ id: current?.id || makeId(), medicationId: medication.id, amount: document.querySelector("#course-amount").value, unitId: document.querySelector("#course-unit").value, startDate: document.querySelector("#course-start").value, endDate: document.querySelector("#course-end").value || null, schedule: [...document.querySelectorAll("#course-schedule input[type=time]")].map((input) => input.value), foodRelation: document.querySelector("#course-food").value, comment: document.querySelector("#course-comment").value.trim(), archived: current?.archived || false, editedAt: new Date().toISOString() }, new Set(state.data.medications.map((item) => item.id)));
     const duplicate = state.data.medicationCourses.find((item) => item.id !== record.id && !item.archived && item.medicationId === record.medicationId && (!item.endDate || item.endDate >= record.startDate) && (!record.endDate || record.endDate >= item.startDate));
     if (duplicate && !event.submitter?.dataset.confirmed) { const warning = document.querySelector("#medication-course-warning"); warning.textContent = "У этого лекарства уже есть пересекающийся активный курс. Нажмите «Сохранить» ещё раз, чтобы продолжить."; warning.hidden = false; button.dataset.confirmed = "true"; return; }
-    setBusy(button, true); await saveRecord(STORES.medicationCourses, record); delete button.dataset.confirmed; closeDialog(document.querySelector("#medication-course-dialog")); await refreshData(); handleSuccessfulDataChange("Курс лекарства сохранён");
+    setBusy(button, true); await saveRecord(STORES.medicationCourses, record); delete button.dataset.confirmed; await closeDialog(document.querySelector("#medication-course-dialog")); await refreshData(); handleSuccessfulDataChange("Курс лекарства сохранён");
   } catch (error) { showError(errorNode, error); } finally { setBusy(button, false); }
 }
 
@@ -1091,6 +1155,7 @@ async function handleMedicationAction(event) {
 function switchView(view) {
   const views = { diary: elements.diaryView, stats: elements.statsView, settings: elements.settingsView, profile: elements.profileView, interface: elements.interfaceView, backup: elements.backupView, directories: elements.directoriesView, medications: elements.medicationsView };
   if (!views[view]) return;
+  state.activeView = view;
   for (const [name, section] of Object.entries(views)) section.hidden = name !== view;
   const settingsActive = ["settings", "profile", "interface", "backup"].includes(view);
   document.querySelectorAll("[data-view]").forEach((button) => { const active = button.dataset.view === view || (button.hasAttribute("data-settings-root") && settingsActive); button.classList.toggle("active", active); if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current"); });
@@ -1101,6 +1166,86 @@ function switchView(view) {
   if (view === "directories") { state.activeDirectory = null; renderDirectories(); }
   if (view === "medications") { state.medicationTab = "today"; state.medicationDate = getMoscowFields().date; renderMedications(); }
   scrollPageToTop();
+}
+
+function navigateRootView(view) {
+  if (!ROOT_VIEWS.has(view)) return;
+  const depth = navigationState()?.depth || 0;
+  switchView(view);
+  if (depth > 0) {
+    pendingRootView = view;
+    history.go(-depth);
+  } else replaceNavigationEntry(0);
+}
+
+function navigateToSettings() {
+  if (state.activeView === "settings") return;
+  if (SETTINGS_CHILD_VIEWS.has(state.activeView)) { navigateBack(); return; }
+  switchView("settings");
+  pushNavigationEntry();
+}
+
+function navigateToSettingsChild(view) {
+  if (!SETTINGS_CHILD_VIEWS.has(view) || state.activeView === view) return;
+  switchView(view);
+  pushNavigationEntry();
+}
+
+function navigateBack() {
+  if ((navigationState()?.depth || 0) <= 0) return Promise.resolve(false);
+  if (pendingNavigationPromise) return pendingNavigationPromise;
+  pendingNavigationPromise = new Promise((resolve) => { resolvePendingNavigation = resolve; });
+  history.back();
+  return pendingNavigationPromise;
+}
+
+function finishPendingNavigation() {
+  resolvePendingNavigation?.(true);
+  resolvePendingNavigation = null;
+  pendingNavigationPromise = null;
+}
+
+function applyNavigationState(next) {
+  if (!next || next.version !== 1) return;
+  const validView = ROOT_VIEWS.has(next.view) || next.view === "settings" || SETTINGS_CHILD_VIEWS.has(next.view);
+  if (!validView) return;
+  applyingNavigationState = true;
+  try {
+    switchView(next.view);
+    if (next.view === "directories" && (next.directory === null || DIRECTORY_META[next.directory])) {
+      state.activeDirectory = next.directory;
+      renderDirectories();
+    }
+    if (next.view === "stats" && ["overview", "pressure", "pulse", "glucose", "weight", "pain"].includes(next.statsMetric)) {
+      state.statsMetric = next.statsMetric;
+      renderStatistics();
+    }
+
+    const desiredDialogs = Array.isArray(next.dialogs) ? next.dialogs.filter((id) => document.getElementById(id)?.matches("dialog")) : [];
+    for (const id of [...state.dialogStack].reverse()) if (!desiredDialogs.includes(id)) hideDialog(document.getElementById(id));
+    for (const id of desiredDialogs) if (!document.getElementById(id).open) openDialog(`#${id}`);
+    state.dialogStack = desiredDialogs;
+  } finally { applyingNavigationState = false; }
+}
+
+function handleNavigationPop(event) {
+  if (pendingRootView) {
+    const view = pendingRootView;
+    pendingRootView = null;
+    applyingNavigationState = true;
+    try { switchView(view); }
+    finally { applyingNavigationState = false; }
+    replaceNavigationEntry(0);
+    finishPendingNavigation();
+    return;
+  }
+  applyNavigationState(event.state?.[APP_NAVIGATION_KEY]);
+  finishPendingNavigation();
+}
+
+function initializeNavigation() {
+  replaceNavigationEntry(0);
+  window.addEventListener("popstate", handleNavigationPop);
 }
 
 async function handleImportFile(event) {
@@ -1115,18 +1260,18 @@ async function handleImportFile(event) {
 
 async function mergeImport() {
   if (!state.pendingImport) return; const button = document.querySelector("#import-merge"); const errorNode = document.querySelector("#import-error"); errorNode.textContent = ""; setBusy(button, true, "Импорт…");
-  try { const importedSettings = state.pendingImport.uiSettings; const result = await importWithUiSettings(importedSettings, () => mergeData(state.pendingImport)); state.pendingImport = null; closeDialog(document.querySelector("#import-dialog")); await refreshData(); handleSuccessfulDataChange(`Импорт завершён · обновлено ${result.imported}`); } catch (error) { showError(errorNode, error); } finally { setBusy(button, false); }
+  try { const importedSettings = state.pendingImport.uiSettings; const result = await importWithUiSettings(importedSettings, () => mergeData(state.pendingImport)); state.pendingImport = null; await closeDialog(document.querySelector("#import-dialog")); await refreshData(); handleSuccessfulDataChange(`Импорт завершён · обновлено ${result.imported}`); } catch (error) { showError(errorNode, error); } finally { setBusy(button, false); }
 }
 
 async function replaceImport() {
   if (!state.pendingImport) return; if (!await confirmAction({ title: "Заменить все данные?", message: "Все текущие данные будут заменены данными из резервной копии. Это действие нельзя отменить.", confirmLabel: "Заменить" })) return;
   const button = document.querySelector("#import-replace"); const errorNode = document.querySelector("#import-error"); errorNode.textContent = ""; setBusy(button, true, "Импорт…");
-  try { const importedSettings = state.pendingImport.uiSettings; await importWithUiSettings(importedSettings, () => replaceAllData(state.pendingImport)); state.pendingImport = null; closeDialog(document.querySelector("#import-dialog")); await refreshData(); clearBackupPending(); showToast("Данные полностью восстановлены"); } catch (error) { showError(errorNode, error); } finally { setBusy(button, false); }
+  try { const importedSettings = state.pendingImport.uiSettings; await importWithUiSettings(importedSettings, () => replaceAllData(state.pendingImport)); state.pendingImport = null; await closeDialog(document.querySelector("#import-dialog")); await refreshData(); clearBackupPending(); showToast("Данные полностью восстановлены"); } catch (error) { showError(errorNode, error); } finally { setBusy(button, false); }
 }
 
 function updateOnlineStatus() { elements.offlineBanner.hidden = navigator.onLine; }
-async function savePromptedBackup() { const button = document.querySelector("#backup-save"); const errorNode = document.querySelector("#backup-prompt-error"); errorNode.textContent = ""; setBusy(button, true, "Подготовка…"); try { const completed = await exportJson(state.data, state.uiSettings); if (!completed) { errorNode.textContent = "Сохранение отменено. Можно повторить или выбрать «Позже»."; return; } clearBackupPending(); closeDialog(document.querySelector("#backup-prompt-dialog")); showToast("Резервная копия сохранена"); } catch (error) { showError(errorNode, error); } finally { setBusy(button, false); } }
-function postponeBackupPrompt() { const suppress = document.querySelector("#backup-dont-remind").checked; if (suppress) dismissBackupReminder(); else clearBackupReminderDismissed(); closeDialog(document.querySelector("#backup-prompt-dialog")); showToast(suppress ? "Не напомним до следующего изменения данных" : "Напомним о резервной копии позже"); }
+async function savePromptedBackup() { const button = document.querySelector("#backup-save"); const errorNode = document.querySelector("#backup-prompt-error"); errorNode.textContent = ""; setBusy(button, true, "Подготовка…"); try { const completed = await exportJson(state.data, state.uiSettings); if (!completed) { errorNode.textContent = "Сохранение отменено. Можно повторить или выбрать «Позже»."; return; } clearBackupPending(); await closeDialog(document.querySelector("#backup-prompt-dialog")); showToast("Резервная копия сохранена"); } catch (error) { showError(errorNode, error); } finally { setBusy(button, false); } }
+async function postponeBackupPrompt() { const suppress = document.querySelector("#backup-dont-remind").checked; if (suppress) dismissBackupReminder(); else clearBackupReminderDismissed(); await closeDialog(document.querySelector("#backup-prompt-dialog")); showToast(suppress ? "Не напомним до следующего изменения данных" : "Напомним о резервной копии позже"); }
 async function requestPersistentStorage() { if (!navigator.storage?.persist) return; try { elements.storageWarning.hidden = await navigator.storage.persist(); } catch { elements.storageWarning.hidden = false; } }
 function markApplicationUpdateReady() {
   const version = document.querySelector("#app-version"); version.disabled = false; version.classList.add("update-ready"); version.setAttribute("aria-label", `${version.textContent}: доступна новая версия, нажмите для обновления`); version.title = "Нажмите, чтобы обновить приложение";
@@ -1155,7 +1300,7 @@ function bindMeasurementConstraints() {
 
 function openEntryTypeDialog() { document.querySelector("#entry-type-error").textContent = ""; openDialog("#entry-type-dialog"); }
 function chooseHeadacheEntry() {
-  closeDialog(document.querySelector("#entry-type-dialog")); openHeadacheForm();
+  replaceDialog(document.querySelector("#entry-type-dialog"), openHeadacheForm);
 }
 
 function bindEvents() {
@@ -1182,11 +1327,14 @@ function bindEvents() {
   if (typeof portraitOrientation.addEventListener === "function") portraitOrientation.addEventListener("change", schedulePortraitSafeTopSync);
   else portraitOrientation.addListener(schedulePortraitSafeTopSync);
   window.addEventListener("orientationchange", schedulePortraitSafeTopSync);
-  document.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => closeDialog(button.closest("dialog")))); document.querySelectorAll("dialog").forEach((dialog) => dialog.addEventListener("close", () => queueMicrotask(syncModalState)));
+  document.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => closeDialog(button.closest("dialog")))); document.querySelectorAll("dialog").forEach((dialog) => {
+    dialog.addEventListener("close", () => queueMicrotask(syncModalState));
+    dialog.addEventListener("cancel", (event) => { event.preventDefault(); closeDialog(dialog); });
+  });
   document.querySelectorAll("dialog.sheet").forEach((dialog) => dialog.addEventListener("click", (event) => { if (event.target === dialog) closeDialog(dialog); }));
-  document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view)));
-  document.querySelectorAll("[data-settings-target]").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.settingsTarget)));
-  document.querySelector("#profile-back").addEventListener("click", () => switchView("settings")); document.querySelector("#interface-back").addEventListener("click", () => switchView("settings")); document.querySelector("#backup-back").addEventListener("click", () => switchView("settings"));
+  document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click", () => { if (button.dataset.view === "settings") navigateToSettings(); else navigateRootView(button.dataset.view); }));
+  document.querySelectorAll("[data-settings-target]").forEach((button) => button.addEventListener("click", () => navigateToSettingsChild(button.dataset.settingsTarget)));
+  document.querySelector("#profile-back").addEventListener("click", navigateBack); document.querySelector("#interface-back").addEventListener("click", navigateBack); document.querySelector("#backup-back").addEventListener("click", navigateBack);
   document.querySelectorAll("[data-theme-choice]").forEach((button) => button.addEventListener("click", () => { try { persistTheme(button.dataset.themeChoice); showToast("Тема изменена"); } catch (error) { showToast(error.message); } }));
   document.querySelectorAll("[data-interface-choice]").forEach((button) => button.addEventListener("click", () => { try { persistUiSettings({ ...state.uiSettings, interface: button.dataset.interfaceChoice }); showToast("Оформление изменено"); } catch (error) { showToast(error.message); } }));
   document.querySelectorAll("[data-glass-effects-choice]").forEach((button) => button.addEventListener("click", () => { try { persistUiSettings({ ...state.uiSettings, glassEffects: button.dataset.glassEffectsChoice }); showToast("Эффекты Liquid Glass изменены"); } catch (error) { showToast(error.message); } }));
@@ -1207,27 +1355,27 @@ function bindEvents() {
   elements.diaryFilterSelect.addEventListener("change", () => setDiaryFilter(elements.diaryFilterSelect.value));
   elements.loadMore.addEventListener("click", () => { state.diaryLimit += PAGE_SIZE; renderDiary(); }); document.querySelector("#add-button").addEventListener("click", openEntryTypeDialog);
   document.querySelector("#choose-headache").addEventListener("click", chooseHeadacheEntry);
-  for (const [selector, opener] of [["#choose-pressure", openPressureForm], ["#choose-pulse", openPulseForm], ["#choose-glucose", openGlucoseForm], ["#choose-weight", openWeightForm]]) document.querySelector(selector).addEventListener("click", () => { closeDialog(document.querySelector("#entry-type-dialog")); opener(); });
+  for (const [selector, opener] of [["#choose-pressure", openPressureForm], ["#choose-pulse", openPulseForm], ["#choose-glucose", openGlucoseForm], ["#choose-weight", openWeightForm]]) document.querySelector(selector).addEventListener("click", () => replaceDialog(document.querySelector("#entry-type-dialog"), opener));
   document.querySelector("#pressure-form").addEventListener("submit", savePressure); document.querySelector("#pulse-form").addEventListener("submit", savePulse); document.querySelector("#headache-form").addEventListener("submit", saveHeadache); document.querySelector("#glucose-form").addEventListener("submit", saveGlucose); document.querySelector("#weight-form").addEventListener("submit", saveWeight); document.querySelector("#profile-form").addEventListener("submit", saveProfileForm);
   document.querySelector("#headache-ongoing").addEventListener("change", () => syncHeadacheEndFields(true)); document.querySelector("#headache-variable-intensity").addEventListener("change", () => syncVariableIntensity(true)); document.querySelector("#medication").addEventListener("change", syncMedicationDateTime);
   document.querySelector("#body-part").addEventListener("change", () => { document.querySelector("#headache-error").textContent = ""; checkOngoingPain(); });
   document.querySelector("#add-body-part").addEventListener("click", () => openDirectoryItemForm("bodyParts", null, true)); document.querySelector("#add-medication").addEventListener("click", () => openDirectoryItemForm("medications", null, true)); document.querySelector("#directory-item-form").addEventListener("submit", saveDirectoryItemForm); document.querySelector("#directory-item-expiration-date").addEventListener("input", updateDirectoryItemExpirationRemaining);
-  elements.directoriesBack.addEventListener("click", () => { state.activeDirectory = null; renderDirectories(); scrollPageToTop(); });
+  elements.directoriesBack.addEventListener("click", navigateBack);
   elements.directoryAdd.addEventListener("click", () => { if (state.activeDirectory) openDirectoryItemForm(state.activeDirectory); });
   for (const input of document.querySelectorAll("#intensity, #intensity-min, #intensity-max")) { input.addEventListener("input", (event) => updateIntensityDisplay(event.currentTarget)); input.addEventListener("change", (event) => snapIntensity(event.currentTarget)); input.addEventListener("keydown", handleIntensityKeydown); } document.querySelector("#pressure-form").addEventListener("input", () => { state.pressureWarningAccepted = false; document.querySelector("#pressure-warning").hidden = true; });
   bindMeasurementConstraints(); elements.diaryList.addEventListener("click", handleDiaryAction);
-  elements.statsContent.addEventListener("click", (event) => { const card = event.target.closest("[data-metric]"); if (!card) return; state.statsMetric = card.dataset.metric; renderStatistics(); scrollPageToTop(); });
-  elements.statsBack.addEventListener("click", () => { state.statsMetric = "overview"; renderStatistics(); }); elements.statsPeriod.addEventListener("change", () => { elements.customPeriod.hidden = elements.statsPeriod.value !== "custom"; renderStatistics(); }); elements.periodStart.addEventListener("change", renderStatistics); elements.periodEnd.addEventListener("change", renderStatistics);
+  elements.statsContent.addEventListener("click", (event) => { const card = event.target.closest("[data-metric]"); if (!card || state.statsMetric !== "overview") return; state.statsMetric = card.dataset.metric; renderStatistics(); scrollPageToTop(); pushNavigationEntry(); });
+  elements.statsBack.addEventListener("click", navigateBack); elements.statsPeriod.addEventListener("change", () => { elements.customPeriod.hidden = elements.statsPeriod.value !== "custom"; renderStatistics(); }); elements.periodStart.addEventListener("change", renderStatistics); elements.periodEnd.addEventListener("change", renderStatistics);
   elements.statsSubfilters.addEventListener("change", (event) => { if (event.target.id === "glucose-context-filter") state.glucoseContext = event.target.value; if (event.target.id === "glucose-format-filter") state.glucoseFormat = event.target.value; if (event.target.id === "pain-body-part-filter") state.painBodyPart = event.target.value; renderStatistics(); });
   document.querySelector("#export-csv").addEventListener("click", async () => { try { if (await exportCsv(state.data)) showToast("CSV подготовлены"); } catch (error) { showError(document.querySelector("#data-error"), error); } });
   document.querySelector("#export-json").addEventListener("click", async () => { try { if (await exportJson(state.data, state.uiSettings)) { clearBackupPending(); showToast("Резервная копия подготовлена"); } } catch (error) { showError(document.querySelector("#data-error"), error); } });
-  document.querySelector("#backup-save").addEventListener("click", savePromptedBackup); document.querySelector("#backup-later").addEventListener("click", postponeBackupPrompt); document.querySelector("#backup-prompt-dialog").addEventListener("cancel", (event) => event.preventDefault());
+  document.querySelector("#backup-save").addEventListener("click", savePromptedBackup); document.querySelector("#backup-later").addEventListener("click", postponeBackupPrompt);
   document.querySelector("#app-version").addEventListener("click", (event) => { if (event.currentTarget.classList.contains("update-ready")) window.location.reload(); });
   document.querySelector("#import-file").addEventListener("change", handleImportFile); document.querySelector("#import-merge").addEventListener("click", mergeImport); document.querySelector("#import-replace").addEventListener("click", replaceImport); window.addEventListener("online", updateOnlineStatus); window.addEventListener("offline", updateOnlineStatus);
 }
 
 async function initialize() {
-  renderInterfaceSettings(); bindEvents(); updateOnlineStatus(); registerServiceWorker();
+  renderInterfaceSettings(); initializeNavigation(); bindEvents(); updateOnlineStatus(); registerServiceWorker();
   try { await openDatabase(); await refreshData(); updateBirthdayBrand(); requestPersistentStorage(); showBackupPrompt(); } catch (error) { elements.diaryList.replaceChildren(emptyState("Не удалось открыть локальные данные", `${error.message} Закройте другие вкладки и попробуйте снова.`, "⚠️")); document.querySelector("#add-button").disabled = true; }
 }
 
