@@ -385,6 +385,16 @@ test("схема курса сортируется и отклоняет пов�
   assert.throws(() => normalizeSchedule(["24:00"]), /ЧЧ:ММ/);
 });
 
+test("дозировка нового курса недоступна до выбора лекарства", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
+  assert.match(html, /id="course-amount"[^>]+required disabled/);
+  assert.match(html, /id="course-unit"[^>]+required disabled><option value="">Выберите<\/option>/);
+  assert.match(app, /function syncCourseMedicationFields\(\)[\s\S]+amount\.disabled = unit\.disabled = !medication[\s\S]+if \(!medication\) \{ amount\.value = ""; unit\.value = ""; \}/);
+  assert.match(app, /course \? formatMedicationAmount\(course\.amount\) : ""[\s\S]+course\?\.unitId \|\| ""; syncCourseMedicationFields\(\)/);
+  assert.match(app, /querySelector\("#course-medication"\)\.addEventListener\("change", syncCourseMedicationFields\)/);
+});
+
 test("расписание дня вычисляется из активных курсов и истории", () => {
   const course = validateMedicationCourse({ id: "course-1", medicationId: "med-1", amount: "1,5", unitId: "tablet", startDate: "2026-08-10", endDate: null, schedule: ["18:00", "06:00"], foodRelation: "after", comment: "", archived: false }, new Set(["med-1"]));
   const intake = { id: "take-1", courseId: course.id, scheduledDate: "2026-08-17", scheduledTime: "06:00", status: "taken", amount: 1.5, unitId: "tablet" };

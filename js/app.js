@@ -811,7 +811,7 @@ async function saveDirectoryItemForm(event) {
     setBusy(button, true); await saveDirectoryItem(context.kind === "bodyParts" ? STORES.bodyParts : STORES.medications, { id, name, expirationDate, editedAt: new Date().toISOString() });
     await closeDialog(document.querySelector("#directory-item-dialog")); await refreshData();
     if (context.quickAdd) {
-      if (context.kind === "medications" && document.querySelector("#medication-course-dialog").open) document.querySelector("#course-medication").value = id;
+      if (context.kind === "medications" && document.querySelector("#medication-course-dialog").open) { document.querySelector("#course-medication").value = id; syncCourseMedicationFields(); }
       else { document.querySelector(context.kind === "bodyParts" ? "#body-part" : "#medication").value = id; if (context.kind === "medications") syncMedicationDateTime(); }
     }
     if (context.quickAdd) { markBackupPending(); showToast(context.kind === "bodyParts" ? "Часть тела сохранена" : "Препарат сохранён"); }
@@ -1112,10 +1112,16 @@ function addCourseScheduleTime(value = "09:00") {
 }
 
 function refreshCourseMedicationOptions() { document.querySelector("#course-medication").replaceChildren(el("option", { value: "", text: "Выберите" }), ...state.data.medications.map((item) => el("option", { value: item.id, text: item.name }))); }
+function syncCourseMedicationFields() {
+  const medication = directoryItemById(state.data.medications, document.querySelector("#course-medication").value);
+  const amount = document.querySelector("#course-amount"); const unit = document.querySelector("#course-unit");
+  amount.disabled = unit.disabled = !medication;
+  if (!medication) { amount.value = ""; unit.value = ""; }
+}
 function openMedicationCourseForm(course = null) {
   document.querySelector("#medication-course-form").reset(); document.querySelector("#medication-course-error").textContent = ""; document.querySelector("#medication-course-warning").hidden = true;
   document.querySelector("#medication-course-id").value = course?.id || ""; document.querySelector("#medication-course-title").textContent = course ? "Редактировать курс" : "Новый курс";
-  refreshCourseMedicationOptions(); document.querySelector("#course-medication").value = course?.medicationId || ""; document.querySelector("#course-amount").value = course ? formatMedicationAmount(course.amount) : "1"; document.querySelector("#course-unit").value = course?.unitId || "tablet";
+  refreshCourseMedicationOptions(); document.querySelector("#course-medication").value = course?.medicationId || ""; document.querySelector("#course-amount").value = course ? formatMedicationAmount(course.amount) : ""; document.querySelector("#course-unit").value = course?.unitId || ""; syncCourseMedicationFields();
   document.querySelector("#course-start").value = course?.startDate || getMoscowFields().date; document.querySelector("#course-end").value = course?.endDate || ""; document.querySelector("#course-food").value = course?.foodRelation || "any"; document.querySelector("#course-comment").value = course?.comment || "";
   document.querySelector("#course-schedule").replaceChildren(); for (const time of course?.schedule || ["09:00"]) addCourseScheduleTime(time); openDialog("#medication-course-dialog");
 }
@@ -1329,6 +1335,7 @@ function bindEvents() {
   document.querySelectorAll("[data-medication-tab]").forEach((button) => button.addEventListener("click", () => { state.medicationTab = button.dataset.medicationTab; renderMedications(); }));
   elements.medicationCourseAdd.addEventListener("click", () => openMedicationCourseForm()); elements.medicationsContent.addEventListener("click", handleMedicationAction);
   document.querySelector("#medication-course-form").addEventListener("submit", saveMedicationCourse); document.querySelector("#course-add-time").addEventListener("click", () => addCourseScheduleTime()); document.querySelector("#course-add-medication").addEventListener("click", () => openDirectoryItemForm("medications", null, true));
+  document.querySelector("#course-medication").addEventListener("change", syncCourseMedicationFields);
   document.querySelector("#medication-course-form").addEventListener("input", () => { delete document.querySelector("#medication-course-save").dataset.confirmed; document.querySelector("#medication-course-warning").hidden = true; });
   document.querySelectorAll("#diary-filter button").forEach((button) => button.addEventListener("click", () => setDiaryFilter(button.dataset.filter)));
   elements.diaryFilterSelect.addEventListener("change", () => setDiaryFilter(elements.diaryFilterSelect.value));
