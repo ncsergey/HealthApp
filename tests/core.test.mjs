@@ -389,6 +389,7 @@ test("дозировка нового курса недоступна до вы�
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
   assert.match(html, /id="course-amount"[^>]+required disabled/);
+  assert.doesNotMatch(html, /id="course-amount"[^>]+placeholder=/);
   assert.match(html, /id="course-unit"[^>]+required disabled><option value="">Выберите<\/option>/);
   assert.match(app, /function syncCourseMedicationFields\(\)[\s\S]+amount\.disabled = unit\.disabled = !medication[\s\S]+if \(!medication\) \{ amount\.value = ""; unit\.value = ""; \}/);
   assert.match(app, /course \? formatMedicationAmount\(course\.amount\) : ""[\s\S]+course\?\.unitId \|\| ""; syncCourseMedicationFields\(\)/);
