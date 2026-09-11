@@ -19,6 +19,10 @@
   --glucose-soft: #f3e9fa;
   --weight: #287e61;
   --weight-soft: #e2f3ed;
+  --temperature: #b84b3f;
+  --temperature-soft: #f9e7e4;
+  --steps: #376c9f;
+  --steps-soft: #e5eff8;
   --status-normal: #176f51;
   --status-normal-bg: #dff3e9;
   --status-low: #255fa5;
@@ -425,12 +429,18 @@ html[data-theme="dark"] .toast { background: #eef5f2; color: #172320; }
 .diary-filters button { min-width: 92px; min-height: 44px; }
 .entry-card.glucose { --entry-accent: var(--glucose); }
 .entry-card.weight { --entry-accent: var(--weight); }
+.entry-card.temperature { --entry-accent: var(--temperature); }
+.entry-card.steps { --entry-accent: var(--steps); }
 .entry-card.pulse { --entry-accent: var(--pulse); }
 .glucose .entry-type { color: var(--glucose); }
 .weight .entry-type { color: var(--weight); }
+.temperature .entry-type { color: var(--temperature); }
+.steps .entry-type { color: var(--steps); }
 .pulse .entry-type { color: var(--pulse); }
 .glucose-choice .choice-icon { color: var(--glucose); background: var(--glucose-soft); }
 .weight-choice .choice-icon { color: var(--weight); background: var(--weight-soft); }
+.temperature-choice .choice-icon { color: var(--temperature); background: var(--temperature-soft); }
+.steps-choice .choice-icon { color: var(--steps); background: var(--steps-soft); }
 .pulse-choice .choice-icon { color: var(--pulse); background: var(--pulse-soft); }
 
 .metric-status { display: inline-flex; width: fit-content; align-items: center; gap: 5px; min-height: 32px; margin-top: 9px; padding: 5px 10px; border: 1px solid currentColor; border-radius: 999px; font-size: 12px; font-weight: 780; line-height: 1.2; }
@@ -502,7 +512,7 @@ html[data-theme="dark"] .toast { background: #eef5f2; color: #172320; }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]), :root[data-theme="auto"] {
-    --glucose: #d19ae9; --glucose-soft: #3b2547; --weight: #73cfaa; --weight-soft: #193b31;
+    --glucose: #d19ae9; --glucose-soft: #3b2547; --weight: #73cfaa; --weight-soft: #193b31; --temperature: #f08f83; --temperature-soft: #472724; --steps: #8fc2ef; --steps-soft: #20364b;
     --status-normal: #82d5b3; --status-normal-bg: #183a2f;
     --status-low: #9cc8f7; --status-low-bg: #1c334a;
     --status-high: #f2bd73; --status-high-bg: #49331f;
@@ -512,7 +522,7 @@ html[data-theme="dark"] .toast { background: #eef5f2; color: #172320; }
 }
 
 :root[data-theme="dark"] {
-  --glucose: #d19ae9; --glucose-soft: #3b2547; --weight: #73cfaa; --weight-soft: #193b31;
+  --glucose: #d19ae9; --glucose-soft: #3b2547; --weight: #73cfaa; --weight-soft: #193b31; --temperature: #f08f83; --temperature-soft: #472724; --steps: #8fc2ef; --steps-soft: #20364b;
   --status-normal: #82d5b3; --status-normal-bg: #183a2f;
   --status-low: #9cc8f7; --status-low-bg: #1c334a;
   --status-high: #f2bd73; --status-high-bg: #49331f;

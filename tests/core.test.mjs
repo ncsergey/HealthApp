@@ -23,7 +23,7 @@ function backupFile(payload) {
 
 const emptyBackupData = Object.freeze({
   profile: null, pressureMeasurements: [], pulseMeasurements: [], painEpisodes: [], glucoseMeasurements: [], weightMeasurements: [],
-  bodyParts: [], medications: [], medicationCourses: [], medicationIntakes: []
+  temperatureMeasurements: [], stepsMeasurements: [], bodyParts: [], medications: [], medicationCourses: [], medicationIntakes: []
 });
 
 test("московское время сохраняется в UTC", () => {
@@ -304,6 +304,39 @@ test("рост и вес вводятся и отображаются с одн�
   assert.match(app, /function formatMetricOneDecimal\(value\) \{ return Number\.isFinite\(value\) \? Number\(value\)\.toFixed\(1\) : "—"; \}/);
   assert.match(app, /formatMetricOneDecimal\(profile\.heightCm\)[\s\S]+formatMetricOneDecimal\(current\.weight\)/);
   assert.match(app, /formatMetricOneDecimal\(stats\.current\.weight\)[\s\S]+formatMetricOneDecimal\(stats\.min\)[\s\S]+formatMetricOneDecimal\(stats\.max\)/);
+});
+
+test("температура и шаги доступны как полноценные записи дневника", async () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
+  const db = readFileSync(new URL("../js/db.js", import.meta.url), "utf8");
+  assert.match(html, /id="choose-temperature"[\s\S]+>🌡️<[\s\S]+id="choose-steps"[\s\S]+>👟</);
+  assert.match(html, /id="temperature-datetime" type="datetime-local" required/);
+  assert.match(html, /id="temperature-value" type="text" inputmode="decimal" required/);
+  assert.match(html, /id="steps-date" type="date" required/);
+  assert.match(html, /id="steps-value" type="number" inputmode="numeric" min="1" max="300000" step="1" required/);
+  assert.match(app, /fillMeasurementForm\("temperature", record\)/);
+  assert.match(app, /dateInput\.value = record\?\.measuredDate \|\| getMoscowFields\(\)\.date/);
+  assert.match(app, /temperature: temperatureCard, steps: stepsCard/);
+  assert.match(app, /temperature < 13 \|\| temperature > 47[\s\S]+Допустимая температура: 13,0–47,0 °C/);
+  assert.match(app, /steps < 1 \|\| steps > 300000[\s\S]+Допустимое количество шагов: 1–300000/);
+  assert.match(db, /const DB_VERSION = 6/);
+  assert.match(db, /temperature: "temperatureMeasurements", steps: "stepsMeasurements"/);
+
+  const temperature = { id: "t1", measuredAt: "2026-08-20T08:00:00.000Z", editedAt: "2026-08-20T08:01:00.000Z", temperature: 36.6 };
+  const steps = { id: "s1", measuredDate: "2026-08-20", editedAt: "2026-08-20T20:00:00.000Z", steps: 5684 };
+  const payload = createBackupPayload({ ...emptyBackupData, temperatureMeasurements: [temperature], stepsMeasurements: [steps] }, { interface: "modern", glassTransparency: 25, glassEffects: "full", glassBlurIntensity: 100 }, "2026-08-21T10:15:30.000Z");
+  const parsed = await parseBackupFile(backupFile(payload));
+  assert.equal(parsed.temperatureMeasurements[0].temperature, 36.6);
+  assert.equal(parsed.stepsMeasurements[0].steps, 5684);
+  for (const value of [13, 47]) { const boundary = structuredClone(payload); boundary.temperatureMeasurements[0].temperature = value; assert.equal((await parseBackupFile(backupFile(boundary))).temperatureMeasurements[0].temperature, value); }
+  for (const value of [1, 300000]) { const boundary = structuredClone(payload); boundary.stepsMeasurements[0].steps = value; assert.equal((await parseBackupFile(backupFile(boundary))).stepsMeasurements[0].steps, value); }
+  for (const value of [12.9, 47.1]) { const outside = structuredClone(payload); outside.temperatureMeasurements[0].temperature = value; await assert.rejects(() => parseBackupFile(backupFile(outside)), /Температура вне диапазона/); }
+  for (const value of [0, 300001]) { const outside = structuredClone(payload); outside.stepsMeasurements[0].steps = value; await assert.rejects(() => parseBackupFile(backupFile(outside)), /Количество шагов вне диапазона/); }
+  const preciseTemperature = structuredClone(payload); preciseTemperature.temperatureMeasurements[0].temperature = 36.66;
+  await assert.rejects(() => parseBackupFile(backupFile(preciseTemperature)), /Температура вне диапазона/);
+  const fractionalSteps = structuredClone(payload); fractionalSteps.stepsMeasurements[0].steps = 5684.5;
+  await assert.rejects(() => parseBackupFile(backupFile(fractionalSteps)), /Количество шагов вне диапазона/);
 });
 
 test("названия справочников и количество лекарства нормализуются", () => {
@@ -784,9 +817,9 @@ test("форма аккаунта использует общий каркас �
 test("все кнопки закрытия используют симметричный SVG-крестик", () => {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
-  assert.equal(html.match(/class="close-button"/g)?.length, 10);
-  assert.equal(html.match(/<svg class="close-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">/g)?.length, 10);
-  assert.equal(html.match(/<path d="M3 3 21 21 M21 3 3 21"><\/path>/g)?.length, 10);
+  assert.equal(html.match(/class="close-button"/g)?.length, 12);
+  assert.equal(html.match(/<svg class="close-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">/g)?.length, 12);
+  assert.equal(html.match(/<path d="M3 3 21 21 M21 3 3 21"><\/path>/g)?.length, 12);
   assert.doesNotMatch(html, />✕<\/button>/);
   assert.match(css, /\.close-icon \{ display: block; width: 24px; height: 24px; overflow: visible; \}/);
   assert.match(css, /\.close-icon path \{[^}]+stroke: currentColor[^}]+stroke-width: 2\.25[^}]+stroke-linecap: round/);
@@ -828,11 +861,11 @@ test("ползунки боли используют общий компонен
   for (const source of [html, app, css]) assert.doesNotMatch(source, /(?:glass|intensity)-range-(?:control|track|fill)/);
 });
 
-test("backup v10 экспортирует обе настройки независимо от интерфейса без сведений об устройстве", () => {
+test("backup v11 экспортирует данные и настройки без сведений об устройстве", () => {
   const data = { ...emptyBackupData, profile: { id: "profile", heightCm: 180 }, weightMeasurements: [{ id: "w1", weight: 80 }], pressureMeasurements: [{ id: "p1", systolic: 120 }] };
   for (const interfaceName of ["classic", "modern"]) for (const transparency of [10, 25, 60]) for (const glassEffects of ["full", "reduced", "none"]) for (const glassBlurIntensity of [25, 100]) {
     const payload = createBackupPayload(data, { interface: interfaceName, glassTransparency: transparency, glassEffects, glassBlurIntensity }, "2026-08-21T10:15:30.000Z");
-    assert.equal(payload.version, 10); assert.equal(payload.exportedAt, "2026-08-21T10:15:30.000Z");
+    assert.equal(payload.version, 11); assert.equal(payload.exportedAt, "2026-08-21T10:15:30.000Z");
     assert.equal(payload.profile.heightCm, 180); assert.equal(payload.weightMeasurements[0].weight, 80); assert.equal(payload.pressureMeasurements[0].systolic, 120);
     assert.deepEqual(payload.settings, { interface: interfaceName, glassTransparency: transparency, glassEffects, glassBlurIntensity });
     const json = JSON.stringify(payload); assert.equal(/"(?:auto|manual|detected|device|deviceModel|model|operatingSystem|userAgent|source)"\s*:/i.test(json), false);
@@ -841,7 +874,7 @@ test("backup v10 экспортирует обе настройки незави
   assert.deepEqual(repaired.settings, { interface: "modern", glassTransparency: 25, glassEffects: "full", glassBlurIntensity: 100 });
 });
 
-test("backup v10 проходит полный цикл и восстанавливает допустимые значения", async () => {
+test("backup v11 проходит полный цикл и восстанавливает допустимые значения", async () => {
   const record = { id: "w1", measuredAt: "2026-08-20T08:00:00.000Z", editedAt: "2026-08-20T08:01:00.000Z", weight: 82, comment: "" };
   for (const glassEffects of ["full", "reduced", "none"]) for (const glassBlurIntensity of [25, 57, 100]) {
     const payload = createBackupPayload({ ...emptyBackupData, weightMeasurements: [record] }, { interface: "modern", glassTransparency: 60, glassEffects, glassBlurIntensity }, "2026-08-21T10:15:30.000Z");
@@ -850,7 +883,7 @@ test("backup v10 проходит полный цикл и восстанавл�
   }
 });
 
-test("backup v10 отклоняет неизвестные, дробные и выходящие за диапазон значения атомарно", async () => {
+test("backup v11 отклоняет неизвестные, дробные и выходящие за диапазон значения атомарно", async () => {
   const valid = createBackupPayload(emptyBackupData, { interface: "classic", glassTransparency: 25, glassEffects: "full", glassBlurIntensity: 100 }, "2026-08-21T10:15:30.000Z");
   for (const settings of [{ ...valid.settings, interface: "automatic" }, { ...valid.settings, glassTransparency: 9 }, { ...valid.settings, glassTransparency: 61 }, { ...valid.settings, glassTransparency: 25.5 }]) {
     await assert.rejects(() => parseBackupFile(backupFile({ ...valid, settings })), /настройки интерфейса/);

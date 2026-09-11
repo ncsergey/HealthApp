@@ -27,7 +27,7 @@
   <div class="app-shell">
     <div class="top-chrome-anchor">
       <header class="app-header">
-        <div class="brand"><span id="brand-icon-container" class="brand-icon-container" aria-hidden="true"><img class="brand-icon" src="./icons/icon-192.png" alt=""><span class="brand-emoji" hidden></span></span><div><p class="eyebrow">Дневник здоровья · <button id="app-version" class="app-version" type="button" disabled aria-label="Версия v162">v162</button></p><h1>MyHealth</h1></div></div>
+        <div class="brand"><span id="brand-icon-container" class="brand-icon-container" aria-hidden="true"><img class="brand-icon" src="./icons/icon-192.png" alt=""><span class="brand-emoji" hidden></span></span><div><p class="eyebrow">Дневник здоровья · <button id="app-version" class="app-version" type="button" disabled aria-label="Версия v164">v164</button></p><h1>MyHealth</h1></div></div>
         <div class="header-actions"><button id="settings-button" class="icon-button" type="button" data-view="settings" data-settings-root aria-label="Настройки" title="Настройки"><span aria-hidden="true">⚙️</span></button></div>
       </header>
     </div>
@@ -40,7 +40,7 @@
     <section id="diary-view" class="view" aria-labelledby="diary-heading">
       <div class="section-heading"><div><p class="eyebrow">Хронология</p><h2 id="diary-heading">Дневник</h2></div></div>
       <label class="field select-field diary-filter-select"><span>Тип записи</span><select id="diary-filter-select" aria-label="Фильтр дневника">
-        <option value="all">Все</option><option value="pain">Боль</option><option value="pressure">Давление</option><option value="pulse">Пульс</option><option value="glucose">Глюкоза</option><option value="weight">Вес</option>
+        <option value="all">Все</option><option value="pain">Боль</option><option value="pressure">Давление</option><option value="pulse">Пульс</option><option value="glucose">Глюкоза</option><option value="weight">Вес</option><option value="temperature">Температура</option><option value="steps">Шаги</option>
       </select></label>
       <div class="filter-scroll" aria-label="Прокрутите для остальных фильтров"><div id="diary-filter" class="segmented diary-filters" role="group" aria-label="Фильтр дневника">
         <button class="active" type="button" data-filter="all" aria-pressed="true">Все</button>
@@ -49,6 +49,8 @@
         <button type="button" data-filter="pulse" aria-pressed="false">Пульс</button>
         <button type="button" data-filter="glucose" aria-pressed="false">Глюкоза</button>
         <button type="button" data-filter="weight" aria-pressed="false">Вес</button>
+        <button type="button" data-filter="temperature" aria-pressed="false">Температура</button>
+        <button type="button" data-filter="steps" aria-pressed="false">Шаги</button>
       </div></div>
       <div id="diary-list" class="timeline" aria-live="polite"></div>
       <button id="load-more-button" class="secondary-button wide" type="button" hidden>Показать ещё</button>
@@ -166,6 +168,8 @@
         <button id="choose-pulse" class="choice-card pulse-choice" type="button"><span class="choice-icon" aria-hidden="true">💓</span><strong>Пульс</strong></button>
         <button id="choose-glucose" class="choice-card glucose-choice" type="button"><span class="choice-icon" aria-hidden="true">🩸</span><strong>Глюкоза</strong></button>
         <button id="choose-weight" class="choice-card weight-choice" type="button"><span class="choice-icon" aria-hidden="true">⚖️</span><strong>Вес</strong></button>
+        <button id="choose-temperature" class="choice-card temperature-choice" type="button"><span class="choice-icon" aria-hidden="true">🌡️</span><strong>Температура</strong></button>
+        <button id="choose-steps" class="choice-card steps-choice" type="button"><span class="choice-icon" aria-hidden="true">👟</span><strong>Шаги</strong></button>
       </div><p id="entry-type-error" class="form-error" role="alert"></p>
     </div>
   </div></dialog>
@@ -242,6 +246,18 @@
     <div class="dialog-header"><div><p class="eyebrow">Дневник веса</p><h2 id="weight-form-title">Новое измерение</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть"><svg class="close-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 3 21 21 M21 3 3 21"></path></svg></button></div>
     <div class="entry-form-content"><input id="weight-id" type="hidden"><label class="field"><span>Дата и время</span><input id="weight-datetime" type="datetime-local" required></label><label class="field"><span>Вес, кг</span><input id="weight-value" type="text" inputmode="decimal" required></label><label class="field"><span>Комментарий <small>необязательно</small></span><textarea id="weight-comment" rows="3" maxlength="1000"></textarea></label><p id="weight-error" class="form-error" role="alert"></p></div>
     <div class="dialog-actions"><button class="secondary-button" type="button" data-close>Отмена</button><button id="weight-save" class="primary-button" type="submit">Сохранить</button></div>
+  </form></dialog>
+
+  <dialog id="temperature-dialog" class="sheet form-sheet entry-form-dialog"><form id="temperature-form" novalidate>
+    <div class="dialog-header"><div><p class="eyebrow">Дневник температуры</p><h2 id="temperature-form-title">Новое измерение</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть"><svg class="close-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 3 21 21 M21 3 3 21"></path></svg></button></div>
+    <div class="entry-form-content"><input id="temperature-id" type="hidden"><label class="field"><span>Дата и время</span><input id="temperature-datetime" type="datetime-local" required></label><label class="field"><span>Температура, °C</span><input id="temperature-value" type="text" inputmode="decimal" required></label><p id="temperature-error" class="form-error" role="alert"></p></div>
+    <div class="dialog-actions"><button class="secondary-button" type="button" data-close>Отмена</button><button id="temperature-save" class="primary-button" type="submit">Сохранить</button></div>
+  </form></dialog>
+
+  <dialog id="steps-dialog" class="sheet form-sheet entry-form-dialog"><form id="steps-form" novalidate>
+    <div class="dialog-header"><div><p class="eyebrow">Дневник активности</p><h2 id="steps-form-title">Шаги за день</h2></div><button class="close-button" type="button" data-close aria-label="Закрыть"><svg class="close-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 3 21 21 M21 3 3 21"></path></svg></button></div>
+    <div class="entry-form-content"><input id="steps-id" type="hidden"><label class="field"><span>Дата</span><input id="steps-date" type="date" required></label><label class="field"><span>Шаги</span><input id="steps-value" type="number" inputmode="numeric" min="1" max="300000" step="1" required></label><p id="steps-error" class="form-error" role="alert"></p></div>
+    <div class="dialog-actions"><button class="secondary-button" type="button" data-close>Отмена</button><button id="steps-save" class="primary-button" type="submit">Сохранить</button></div>
   </form></dialog>
 
   <dialog id="profile-dialog" class="sheet form-sheet entry-form-dialog"><form id="profile-form" novalidate>

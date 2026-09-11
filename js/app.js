@@ -18,8 +18,8 @@ const PORTRAIT_SAFE_TOP_KEY = "myhealth:portrait-safe-top:v1";
 const GLUCOSE_CONTEXT = Object.freeze({ fasting: "Натощак", beforeMeal: "Перед едой", after1h: "Через 1 час после начала еды", after2h: "Через 2 часа после начала еды", random: "Случайное измерение" });
 const GLUCOSE_FORMAT = Object.freeze({ plasma: "Эквивалент плазмы", wholeBlood: "Цельная кровь" });
 const PULSE_CONTEXT = Object.freeze({ resting: "В покое", active: "После физической нагрузки", unknown: "Контекст не указан" });
-const COLLECTION_BY_KIND = Object.freeze({ pressure: "pressureMeasurements", pulse: "pulseMeasurements", pain: "painEpisodes", glucose: "glucoseMeasurements", weight: "weightMeasurements" });
-const STORE_BY_KIND = Object.freeze({ pressure: STORES.pressure, pulse: STORES.pulse, pain: STORES.pain, glucose: STORES.glucose, weight: STORES.weight });
+const COLLECTION_BY_KIND = Object.freeze({ pressure: "pressureMeasurements", pulse: "pulseMeasurements", pain: "painEpisodes", glucose: "glucoseMeasurements", weight: "weightMeasurements", temperature: "temperatureMeasurements", steps: "stepsMeasurements" });
+const STORE_BY_KIND = Object.freeze({ pressure: STORES.pressure, pulse: STORES.pulse, pain: STORES.pain, glucose: STORES.glucose, weight: STORES.weight, temperature: STORES.temperature, steps: STORES.steps });
 const DIRECTORY_META = Object.freeze({ bodyParts: { title: "Части тела", icon: "🧍" }, medications: { title: "Препараты", icon: "💊" } });
 const APP_NAVIGATION_KEY = "myhealthNavigation";
 const ROOT_VIEWS = new Set(["diary", "stats", "medications", "directories"]);
@@ -47,7 +47,7 @@ applyTheme(initialTheme);
 applyUiSettings(initialUiSettings);
 
 const state = {
-  data: { profile: null, pressureMeasurements: [], pulseMeasurements: [], painEpisodes: [], glucoseMeasurements: [], weightMeasurements: [], bodyParts: [], medications: [], medicationCourses: [], medicationIntakes: [] },
+  data: { profile: null, pressureMeasurements: [], pulseMeasurements: [], painEpisodes: [], glucoseMeasurements: [], weightMeasurements: [], temperatureMeasurements: [], stepsMeasurements: [], bodyParts: [], medications: [], medicationCourses: [], medicationIntakes: [] },
   diaryFilter: "all", diaryLimit: PAGE_SIZE, statsMetric: "overview", pendingImport: null,
   pressureWarningAccepted: false, chartObservers: [], glucoseContext: "all", glucoseFormat: "all", painBodyPart: "all", directoryContext: null, activeDirectory: null,
   medicationTab: "today", medicationDate: getMoscowFields().date, activeView: "diary", uiSettings: initialUiSettings, theme: initialTheme
@@ -368,7 +368,7 @@ function setBusy(button, busy, busyLabel = "Сохранение…") {
   else { button.textContent = button.dataset.label || "Сохранить"; button.disabled = false; }
 }
 
-function recordTime(kind, record) { return kind === "pain" ? record.startedAt : record.measuredAt; }
+function recordTime(kind, record) { if (kind === "pain") return record.startedAt; if (kind === "steps") return `${record.measuredDate}T09:00:00.000Z`; return record.measuredAt; }
 function newestWeight(items = state.data.weightMeasurements) { return [...items].sort((a, b) => new Date(b.measuredAt) - new Date(a.measuredAt))[0] || null; }
 function profileAge() { return state.data.profile ? ageOnDate(state.data.profile.birthDate, new Date(`${getMoscowFields().date}T12:00:00.000Z`)) : null; }
 function ageLabel(age) { if (!Number.isFinite(age)) return "—"; const mod100 = age % 100; const mod10 = age % 10; const word = mod100 >= 11 && mod100 <= 14 ? "лет" : mod10 === 1 ? "год" : mod10 >= 2 && mod10 <= 4 ? "года" : "лет"; return `${age} ${word}`; }
@@ -395,6 +395,12 @@ function validateWeightInput(value) {
   return { weight };
 }
 
+function validDiaryDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || value > getMoscowFields().date) return false;
+  const [year, month, day] = value.split("-").map(Number); const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() + 1 === month && date.getUTCDate() === day;
+}
+
 function statusChip(status, compact = false) {
   return el("span", { className: `metric-status status-${status.level}${compact ? " compact" : ""}`, attrs: { "aria-label": status.text, title: status.explanation || "" } }, [
     el("span", { text: status.emoji, attrs: { "aria-hidden": "true" } }), document.createTextNode(status.text)
@@ -403,7 +409,7 @@ function statusChip(status, compact = false) {
 
 async function refreshData() {
   state.data = await getAllData();
-  for (const [key, dateKey] of [["pressureMeasurements", "measuredAt"], ["pulseMeasurements", "measuredAt"], ["painEpisodes", "startedAt"], ["glucoseMeasurements", "measuredAt"], ["weightMeasurements", "measuredAt"]]) {
+  for (const [key, dateKey] of [["pressureMeasurements", "measuredAt"], ["pulseMeasurements", "measuredAt"], ["painEpisodes", "startedAt"], ["glucoseMeasurements", "measuredAt"], ["weightMeasurements", "measuredAt"], ["temperatureMeasurements", "measuredAt"], ["stepsMeasurements", "measuredDate"]]) {
     state.data[key].sort((a, b) => new Date(b[dateKey]) - new Date(a[dateKey]));
   }
   const bodyOrder = new Map(DEFAULT_BODY_PARTS.map((item, index) => [item.id, index]));
@@ -425,8 +431,9 @@ function actionButton(label, symbol, action, kind, id) {
 }
 
 function entryShell(kind, record, main, label) {
+  const time = recordTime(kind, record);
   return el("article", { className: `entry-card ${kind}` }, [
-    el("time", { className: "entry-time", text: formatTime(recordTime(kind, record)), attrs: { datetime: recordTime(kind, record) } }), main,
+    el("time", { className: "entry-time", text: kind === "steps" ? "За день" : formatTime(time), attrs: { datetime: time } }), main,
     el("div", { className: "card-actions" }, [actionButton(`Редактировать ${label}`, "✏️", "edit", kind, record.id), actionButton(`Удалить ${label}`, "🗑️", "delete", kind, record.id)])
   ]);
 }
@@ -494,6 +501,22 @@ function weightCard(record) {
   return entryShell("weight", record, main, "измерение веса");
 }
 
+function temperatureCard(record) {
+  const main = el("div", { className: "entry-main" }, [
+    el("div", { className: "entry-type" }, [el("span", { className: "entry-emoji", text: "🌡️", attrs: { "aria-hidden": "true" } }), document.createTextNode("Температура")]),
+    el("div", { className: "entry-value", text: `${formatMetricOneDecimal(record.temperature)} °C` })
+  ]);
+  return entryShell("temperature", record, main, "измерение температуры");
+}
+
+function stepsCard(record) {
+  const main = el("div", { className: "entry-main" }, [
+    el("div", { className: "entry-type" }, [el("span", { className: "entry-emoji", text: "👟", attrs: { "aria-hidden": "true" } }), document.createTextNode("Шаги")]),
+    el("div", { className: "entry-value", text: `${record.steps} шагов` })
+  ]);
+  return entryShell("steps", record, main, "запись шагов");
+}
+
 function renderDiary() {
   const events = [];
   for (const kind of Object.keys(COLLECTION_BY_KIND)) {
@@ -511,7 +534,7 @@ function renderDiary() {
   for (const event of visible) {
     const day = getDateKey(event.time);
     if (day !== currentDay) { currentDay = day; group = el("section", { className: "day-group", attrs: { "aria-label": formatDayLabel(event.time) } }, [el("h3", { className: "day-label", text: formatDayLabel(event.time) })]); elements.diaryList.append(group); }
-    group.append({ pressure: pressureCard, pulse: pulseCard, pain: painCard, glucose: glucoseCard, weight: weightCard }[event.kind](event.item));
+    group.append({ pressure: pressureCard, pulse: pulseCard, pain: painCard, glucose: glucoseCard, weight: weightCard, temperature: temperatureCard, steps: stepsCard }[event.kind](event.item));
   }
 }
 
@@ -561,6 +584,19 @@ function openWeightForm(record = null) {
   document.querySelector("#weight-form").reset(); document.querySelector("#weight-error").textContent = ""; document.querySelector("#weight-id").value = record?.id || ""; document.querySelector("#weight-form-title").textContent = record ? "Редактировать измерение" : "Новое измерение"; fillMeasurementForm("weight", record);
   if (record) { document.querySelector("#weight-value").value = formatMetricOneDecimal(record.weight); document.querySelector("#weight-comment").value = record.comment; }
   openDialog("#weight-dialog");
+}
+
+function openTemperatureForm(record = null) {
+  document.querySelector("#temperature-form").reset(); document.querySelector("#temperature-error").textContent = ""; document.querySelector("#temperature-id").value = record?.id || ""; document.querySelector("#temperature-form-title").textContent = record ? "Редактировать измерение" : "Новое измерение"; fillMeasurementForm("temperature", record);
+  if (record) document.querySelector("#temperature-value").value = formatMetricOneDecimal(record.temperature);
+  openDialog("#temperature-dialog");
+}
+
+function openStepsForm(record = null) {
+  document.querySelector("#steps-form").reset(); document.querySelector("#steps-error").textContent = ""; document.querySelector("#steps-id").value = record?.id || ""; document.querySelector("#steps-form-title").textContent = record ? "Редактировать шаги" : "Шаги за день";
+  const dateInput = document.querySelector("#steps-date"); dateInput.max = getMoscowFields().date; dateInput.value = record?.measuredDate || getMoscowFields().date;
+  if (record) document.querySelector("#steps-value").value = record.steps;
+  openDialog("#steps-dialog");
 }
 
 function syncHeadacheEndFields(updateValue = false) {
@@ -718,6 +754,27 @@ async function saveWeight(event) {
   try {
     const record = { id: document.querySelector("#weight-id").value || makeId(), measuredAt: measurementTimestamp("weight"), editedAt: new Date().toISOString(), weight, comment: document.querySelector("#weight-comment").value.trim() };
     setBusy(button, true); await saveRecord(STORES.weight, record); await closeDialog(document.querySelector("#weight-dialog")); await refreshData(); handleSuccessfulDataChange("Вес сохранён");
+  } catch (error) { showError(errorNode, error); } finally { setBusy(button, false); }
+}
+
+async function saveTemperature(event) {
+  event.preventDefault(); const button = document.querySelector("#temperature-save"); if (button.disabled) return; const errorNode = document.querySelector("#temperature-error"); errorNode.textContent = "";
+  const raw = document.querySelector("#temperature-value").value.trim(); const temperature = Number(raw.replace(",", "."));
+  if (!/^\d+(?:[.,]\d)?$/.test(raw) || !Number.isFinite(temperature) || temperature < 13 || temperature > 47) { errorNode.textContent = "Допустимая температура: 13,0–47,0 °C, один знак после запятой или точки"; return; }
+  try {
+    const record = { id: document.querySelector("#temperature-id").value || makeId(), measuredAt: measurementTimestamp("temperature"), editedAt: new Date().toISOString(), temperature };
+    setBusy(button, true); await saveRecord(STORES.temperature, record); await closeDialog(document.querySelector("#temperature-dialog")); await refreshData(); handleSuccessfulDataChange("Температура сохранена");
+  } catch (error) { showError(errorNode, error); } finally { setBusy(button, false); }
+}
+
+async function saveSteps(event) {
+  event.preventDefault(); const button = document.querySelector("#steps-save"); if (button.disabled) return; const errorNode = document.querySelector("#steps-error"); errorNode.textContent = "";
+  const measuredDate = document.querySelector("#steps-date").value; const steps = finiteInteger(document.querySelector("#steps-value").value);
+  if (!validDiaryDate(measuredDate)) { errorNode.textContent = "Укажите корректную дату, не позднее сегодняшней."; return; }
+  if (steps === null || steps < 1 || steps > 300000) { errorNode.textContent = "Допустимое количество шагов: 1–300000"; return; }
+  try {
+    const record = { id: document.querySelector("#steps-id").value || makeId(), measuredDate, editedAt: new Date().toISOString(), steps };
+    setBusy(button, true); await saveRecord(STORES.steps, record); await closeDialog(document.querySelector("#steps-dialog")); await refreshData(); handleSuccessfulDataChange("Шаги сохранены");
   } catch (error) { showError(errorNode, error); } finally { setBusy(button, false); }
 }
 
@@ -885,7 +942,7 @@ function confirmAction({ title, message, confirmLabel = "Подтвердить"
 async function handleDiaryAction(event) {
   const button = event.target.closest("[data-action]"); if (!button) return; const { action, kind, id } = button.dataset;
   const record = state.data[COLLECTION_BY_KIND[kind]]?.find((item) => item.id === id); if (!record) return;
-  if (action === "edit") { ({ pressure: openPressureForm, pulse: openPulseForm, pain: openHeadacheForm, glucose: openGlucoseForm, weight: openWeightForm })[kind](record); return; }
+  if (action === "edit") { ({ pressure: openPressureForm, pulse: openPulseForm, pain: openHeadacheForm, glucose: openGlucoseForm, weight: openWeightForm, temperature: openTemperatureForm, steps: openStepsForm })[kind](record); return; }
   if (action === "delete") {
     if (!await confirmAction({ title: "Удалить эту запись?", message: "Это действие нельзя отменить.", confirmLabel: "Удалить" })) return;
     try { await deleteRecord(STORE_BY_KIND[kind], id); await refreshData(); handleSuccessfulDataChange("Запись удалена"); } catch (error) { showToast(`Не удалось удалить: ${error.message}`); }
@@ -1238,7 +1295,7 @@ async function handleImportFile(event) {
   const errorNode = document.querySelector("#data-error"); errorNode.textContent = "";
   try {
     const data = await parseBackupFile(event.target.files[0]); const conflicts = await countImportConflicts(data); state.pendingImport = data;
-    const summary = [[data.profile ? 1 : 0, "профиль"], [data.pressureMeasurements.length, "давление"], [data.pulseMeasurements.length, "пульс"], [data.painEpisodes.length, "боль"], [data.glucoseMeasurements.length, "глюкоза"], [data.weightMeasurements.length, "вес"], [data.bodyParts.length, "части тела"], [data.medications.length, "лекарства"], [data.medicationCourses.length, "курсы"], [data.medicationIntakes.length, "приёмы"]];
+    const summary = [[data.profile ? 1 : 0, "профиль"], [data.pressureMeasurements.length, "давление"], [data.pulseMeasurements.length, "пульс"], [data.painEpisodes.length, "боль"], [data.glucoseMeasurements.length, "глюкоза"], [data.weightMeasurements.length, "вес"], [data.temperatureMeasurements.length, "температура"], [data.stepsMeasurements.length, "шаги"], [data.bodyParts.length, "части тела"], [data.medications.length, "лекарства"], [data.medicationCourses.length, "курсы"], [data.medicationIntakes.length, "приёмы"]];
     document.querySelector("#import-summary").replaceChildren(...summary.map(([count, label]) => el("div", {}, [el("strong", { text: String(count) }), el("span", { text: label })])), el("div", { className: "wide" }, [el("strong", { text: String(conflicts) }), el("span", { text: "совпадений ID" })]));
     openDialog("#import-dialog");
   } catch (error) { showError(errorNode, error); } finally { event.target.value = ""; }
@@ -1279,7 +1336,7 @@ function registerServiceWorker() {
 }
 
 function bindMeasurementConstraints() {
-  for (const selector of ["#pressure-datetime", "#pulse-datetime", "#glucose-datetime", "#weight-datetime", "#headache-start-datetime", "#headache-end-datetime", "#medication-datetime"]) {
+  for (const selector of ["#pressure-datetime", "#pulse-datetime", "#glucose-datetime", "#weight-datetime", "#temperature-datetime", "#headache-start-datetime", "#headache-end-datetime", "#medication-datetime"]) {
     const input = document.querySelector(selector); syncNotFutureConstraint(input); input.addEventListener("focus", () => syncNotFutureConstraint(input));
   }
 }
@@ -1342,8 +1399,8 @@ function bindEvents() {
   elements.diaryFilterSelect.addEventListener("change", () => setDiaryFilter(elements.diaryFilterSelect.value));
   elements.loadMore.addEventListener("click", () => { state.diaryLimit += PAGE_SIZE; renderDiary(); }); document.querySelector("#add-button").addEventListener("click", openEntryTypeDialog);
   document.querySelector("#choose-headache").addEventListener("click", chooseHeadacheEntry);
-  for (const [selector, opener] of [["#choose-pressure", openPressureForm], ["#choose-pulse", openPulseForm], ["#choose-glucose", openGlucoseForm], ["#choose-weight", openWeightForm]]) document.querySelector(selector).addEventListener("click", () => replaceDialog(document.querySelector("#entry-type-dialog"), opener));
-  document.querySelector("#pressure-form").addEventListener("submit", savePressure); document.querySelector("#pulse-form").addEventListener("submit", savePulse); document.querySelector("#headache-form").addEventListener("submit", saveHeadache); document.querySelector("#glucose-form").addEventListener("submit", saveGlucose); document.querySelector("#weight-form").addEventListener("submit", saveWeight); document.querySelector("#profile-form").addEventListener("submit", saveProfileForm);
+  for (const [selector, opener] of [["#choose-pressure", openPressureForm], ["#choose-pulse", openPulseForm], ["#choose-glucose", openGlucoseForm], ["#choose-weight", openWeightForm], ["#choose-temperature", openTemperatureForm], ["#choose-steps", openStepsForm]]) document.querySelector(selector).addEventListener("click", () => replaceDialog(document.querySelector("#entry-type-dialog"), opener));
+  document.querySelector("#pressure-form").addEventListener("submit", savePressure); document.querySelector("#pulse-form").addEventListener("submit", savePulse); document.querySelector("#headache-form").addEventListener("submit", saveHeadache); document.querySelector("#glucose-form").addEventListener("submit", saveGlucose); document.querySelector("#weight-form").addEventListener("submit", saveWeight); document.querySelector("#temperature-form").addEventListener("submit", saveTemperature); document.querySelector("#steps-form").addEventListener("submit", saveSteps); document.querySelector("#profile-form").addEventListener("submit", saveProfileForm);
   document.querySelector("#headache-ongoing").addEventListener("change", () => syncHeadacheEndFields(true)); document.querySelector("#headache-variable-intensity").addEventListener("change", () => syncVariableIntensity(true)); document.querySelector("#medication").addEventListener("change", syncMedicationDateTime);
   document.querySelector("#body-part").addEventListener("change", () => { document.querySelector("#headache-error").textContent = ""; checkOngoingPain(); });
   document.querySelector("#add-body-part").addEventListener("click", () => openDirectoryItemForm("bodyParts", null, true)); document.querySelector("#add-medication").addEventListener("click", () => openDirectoryItemForm("medications", null, true)); document.querySelector("#directory-item-form").addEventListener("submit", saveDirectoryItemForm); document.querySelector("#directory-item-expiration-date").addEventListener("input", updateDirectoryItemExpirationRemaining);

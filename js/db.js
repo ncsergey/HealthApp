@@ -1,19 +1,19 @@
 import { DEFAULT_BODY_PARTS, normalizeDirectoryName, normalizedNameKey, stableNameId } from "./pain.js";
 
 const DB_NAME = "pressure-diary";
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 
 export const STORES = Object.freeze({
   profile: "profile", pressure: "pressureMeasurements", pulse: "pulseMeasurements",
   pain: "painEpisodes", headache: "headacheEpisodes", glucose: "glucoseMeasurements",
-  weight: "weightMeasurements", bodyParts: "bodyParts", medications: "medications",
+  weight: "weightMeasurements", temperature: "temperatureMeasurements", steps: "stepsMeasurements", bodyParts: "bodyParts", medications: "medications",
   medicationCourses: "medicationCourses", medicationIntakes: "medicationIntakes"
 });
 
-const ACTIVE_STORES = Object.freeze([STORES.profile, STORES.pressure, STORES.pulse, STORES.pain, STORES.glucose, STORES.weight, STORES.bodyParts, STORES.medications, STORES.medicationCourses, STORES.medicationIntakes]);
+const ACTIVE_STORES = Object.freeze([STORES.profile, STORES.pressure, STORES.pulse, STORES.pain, STORES.glucose, STORES.weight, STORES.temperature, STORES.steps, STORES.bodyParts, STORES.medications, STORES.medicationCourses, STORES.medicationIntakes]);
 const COLLECTIONS = Object.freeze([
   ["pressureMeasurements", STORES.pressure], ["pulseMeasurements", STORES.pulse], ["painEpisodes", STORES.pain],
-  ["glucoseMeasurements", STORES.glucose], ["weightMeasurements", STORES.weight], ["bodyParts", STORES.bodyParts], ["medications", STORES.medications],
+  ["glucoseMeasurements", STORES.glucose], ["weightMeasurements", STORES.weight], ["temperatureMeasurements", STORES.temperature], ["stepsMeasurements", STORES.steps], ["bodyParts", STORES.bodyParts], ["medications", STORES.medications],
   ["medicationCourses", STORES.medicationCourses], ["medicationIntakes", STORES.medicationIntakes]
 ]);
 let dbPromise;
@@ -69,7 +69,7 @@ export function openDatabase() {
       const db = request.result;
       createMeasurementStore(db, STORES.pressure); createMeasurementStore(db, STORES.pulse);
       createMeasurementStore(db, STORES.headache, "startedAt"); createMeasurementStore(db, STORES.pain, "startedAt");
-      createMeasurementStore(db, STORES.glucose); createMeasurementStore(db, STORES.weight);
+      createMeasurementStore(db, STORES.glucose); createMeasurementStore(db, STORES.weight); createMeasurementStore(db, STORES.temperature); createMeasurementStore(db, STORES.steps, "measuredDate");
       createMeasurementStore(db, STORES.medicationCourses, "startDate"); createMeasurementStore(db, STORES.medicationIntakes, "scheduledDate");
       createDirectoryStore(db, STORES.bodyParts); createDirectoryStore(db, STORES.medications);
       if (!db.objectStoreNames.contains(STORES.profile)) {
@@ -118,7 +118,7 @@ export function normalizeData(data = {}) {
   const medicationsByName = new Map([...normalizedDirectory(data.medications, true), ...legacyMedications].map((item) => [item.nameKey, item]));
   return { profile: data.profile || null, pressureMeasurements: data.pressureMeasurements || [],
     pulseMeasurements: (data.pulseMeasurements || []).map((item) => ({ ...item, context: item.context || "unknown", spo2: Number.isInteger(item.spo2) ? item.spo2 : null, stress: Number.isInteger(item.stress) ? item.stress : null })),
-    painEpisodes: sourcePain.map(normalizePainRecord), glucoseMeasurements: data.glucoseMeasurements || [], weightMeasurements: data.weightMeasurements || [],
+    painEpisodes: sourcePain.map(normalizePainRecord), glucoseMeasurements: data.glucoseMeasurements || [], weightMeasurements: data.weightMeasurements || [], temperatureMeasurements: data.temperatureMeasurements || [], stepsMeasurements: data.stepsMeasurements || [],
     bodyParts, medications: [...medicationsByName.values()], medicationCourses: data.medicationCourses || [], medicationIntakes: data.medicationIntakes || [] };
 }
 
@@ -175,7 +175,7 @@ export async function mergeData(input) {
   }
   incomingData.painEpisodes = incomingData.painEpisodes.map((item) => ({ ...item, bodyPartId: remaps.bodyParts.get(item.bodyPartId) || item.bodyPartId, medicationId: item.medicationId ? remaps.medications.get(item.medicationId) || item.medicationId : null }));
   incomingData.medicationCourses = incomingData.medicationCourses.map((item) => ({ ...item, medicationId: remaps.medications.get(item.medicationId) || item.medicationId }));
-  for (const key of ["pressureMeasurements", "pulseMeasurements", "painEpisodes", "glucoseMeasurements", "weightMeasurements", "medicationCourses", "medicationIntakes"]) { const result = mergeCollection(current[key], incomingData[key]); merged[key] = result.items; conflicts += result.conflicts; imported += result.imported; }
+  for (const key of ["pressureMeasurements", "pulseMeasurements", "painEpisodes", "glucoseMeasurements", "weightMeasurements", "temperatureMeasurements", "stepsMeasurements", "medicationCourses", "medicationIntakes"]) { const result = mergeCollection(current[key], incomingData[key]); merged[key] = result.items; conflicts += result.conflicts; imported += result.imported; }
   if (incomingData.profile) { if (current.profile) conflicts += 1; if (!current.profile || incomingData.profile.editedAt > current.profile.editedAt) { merged.profile = incomingData.profile; imported += 1; } }
   await replaceAllData(merged); return { conflicts, imported };
 }

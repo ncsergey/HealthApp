@@ -52,6 +52,8 @@ export async function exportCsv(data) {
     ["pain.csv", painRows, ["bodyPart", "startedAt", "endedAt", "intensityMin", "intensityMax", "medication", "medicationAmount", "medicationUnit", "medicationTakenAt", "comment"]],
     ["glucose.csv", data.glucoseMeasurements, ["id", "measuredAt", "editedAt", "value", "format", "context", "comment"]],
     ["weight.csv", data.weightMeasurements, ["id", "measuredAt", "editedAt", "weight", "comment"]],
+    ["temperature.csv", data.temperatureMeasurements || [], ["id", "measuredAt", "editedAt", "temperature"]],
+    ["steps.csv", data.stepsMeasurements || [], ["id", "measuredDate", "editedAt", "steps"]],
     ["medication-courses.csv", medicationCourseRows, ["id", "medicationId", "medication", "amount", "unitId", "startDate", "endDate", "foodRelation", "comment", "archived", "editedAt"]],
     ["medication-schedules.csv", medicationScheduleRows, ["courseId", "time"]]
   ];
@@ -67,7 +69,7 @@ export function createBackupPayload(data, uiSettings, exportedAt = new Date().to
   if (!settings) throw new Error("Не удалось подготовить настройки интерфейса для резервной копии.");
   return {
     format: "health-diary-backup",
-    version: 10,
+    version: 11,
     exportedAt,
     settings,
     profile: data.profile,
@@ -76,6 +78,8 @@ export function createBackupPayload(data, uiSettings, exportedAt = new Date().to
     painEpisodes: data.painEpisodes,
     glucoseMeasurements: data.glucoseMeasurements,
     weightMeasurements: data.weightMeasurements,
+    temperatureMeasurements: data.temperatureMeasurements || [],
+    stepsMeasurements: data.stepsMeasurements || [],
     bodyParts: data.bodyParts,
     medications: data.medications,
     medicationCourses: data.medicationCourses || [],
