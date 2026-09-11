@@ -29,8 +29,7 @@ let backupReminderDismissedFallback = false;
 let modalScrollY = 0;
 let applyingNavigationState = false;
 let pendingRootView = null;
-let pendingNavigationPromise = null;
-let resolvePendingNavigation = null;
+let modalNavigationState = null;
 let confirmedPortraitSafeTop = null;
 let portraitSafeTopCandidate = null;
 let portraitSafeTopCandidateCount = 0;
@@ -51,7 +50,7 @@ const state = {
   data: { profile: null, pressureMeasurements: [], pulseMeasurements: [], painEpisodes: [], glucoseMeasurements: [], weightMeasurements: [], bodyParts: [], medications: [], medicationCourses: [], medicationIntakes: [] },
   diaryFilter: "all", diaryLimit: PAGE_SIZE, statsMetric: "overview", pendingImport: null,
   pressureWarningAccepted: false, chartObservers: [], glucoseContext: "all", glucoseFormat: "all", painBodyPart: "all", directoryContext: null, activeDirectory: null,
-  medicationTab: "today", medicationDate: getMoscowFields().date, activeView: "diary", dialogStack: [], uiSettings: initialUiSettings, theme: initialTheme
+  medicationTab: "today", medicationDate: getMoscowFields().date, activeView: "diary", uiSettings: initialUiSettings, theme: initialTheme
 };
 
 const elements = {
@@ -322,8 +321,7 @@ function navigationSnapshot(depth = navigationState()?.depth || 0) {
       depth,
       view: state.activeView,
       directory: state.activeView === "directories" ? state.activeDirectory : null,
-      statsMetric: state.activeView === "stats" ? state.statsMetric : "overview",
-      dialogs: [...state.dialogStack]
+      statsMetric: state.activeView === "stats" ? state.statsMetric : "overview"
     }
   };
 }
@@ -333,43 +331,36 @@ function pushNavigationEntry() { history.pushState(navigationSnapshot((navigatio
 
 function hideDialog(dialog) {
   if (!dialog?.open) return;
-  state.dialogStack = state.dialogStack.filter((id) => id !== dialog.id);
   dialog.close();
+  if (!document.querySelector("dialog[open]")) modalNavigationState = null;
   queueMicrotask(syncModalState);
 }
 
 function closeDialog(dialog) {
   if (!dialog?.open) return Promise.resolve(false);
-  const current = navigationState();
-  if (!applyingNavigationState && current?.depth > 0 && current.dialogs?.at(-1) === dialog.id) return navigateBack();
   hideDialog(dialog);
-  if (!applyingNavigationState && current) replaceNavigationEntry(current.depth);
   return Promise.resolve(true);
 }
 
 function openDialog(selector) {
   const dialog = document.querySelector(selector);
   if (!dialog.open) {
+    if (!document.querySelector("dialog[open]")) modalNavigationState = navigationState();
     const entryContent = dialog.matches(".entry-form-dialog") ? dialog.querySelector(".entry-form-content") : null;
     dialog.showModal();
-    state.dialogStack = [...state.dialogStack.filter((id) => id !== dialog.id), dialog.id];
     if (entryContent) {
       entryContent.scrollTop = 0;
       dialog.querySelector(".close-button")?.focus({ preventScroll: true });
       requestAnimationFrame(() => { entryContent.scrollTop = 0; });
     }
     syncModalState();
-    if (!applyingNavigationState) pushNavigationEntry();
   }
   return dialog;
 }
 
 function replaceDialog(dialog, openReplacement) {
-  const depth = navigationState()?.depth || 0;
-  applyingNavigationState = true;
-  try { hideDialog(dialog); openReplacement(); }
-  finally { applyingNavigationState = false; }
-  replaceNavigationEntry(depth);
+  hideDialog(dialog);
+  openReplacement();
 }
 
 function setBusy(button, busy, busyLabel = "Сохранение…") {
@@ -1192,17 +1183,7 @@ function navigateToSettingsChild(view) {
 }
 
 function navigateBack() {
-  if ((navigationState()?.depth || 0) <= 0) return Promise.resolve(false);
-  if (pendingNavigationPromise) return pendingNavigationPromise;
-  pendingNavigationPromise = new Promise((resolve) => { resolvePendingNavigation = resolve; });
-  history.back();
-  return pendingNavigationPromise;
-}
-
-function finishPendingNavigation() {
-  resolvePendingNavigation?.(true);
-  resolvePendingNavigation = null;
-  pendingNavigationPromise = null;
+  if ((navigationState()?.depth || 0) > 0) history.back();
 }
 
 function applyNavigationState(next) {
@@ -1221,14 +1202,14 @@ function applyNavigationState(next) {
       renderStatistics();
     }
 
-    const desiredDialogs = Array.isArray(next.dialogs) ? next.dialogs.filter((id) => document.getElementById(id)?.matches("dialog")) : [];
-    for (const id of [...state.dialogStack].reverse()) if (!desiredDialogs.includes(id)) hideDialog(document.getElementById(id));
-    for (const id of desiredDialogs) if (!document.getElementById(id).open) openDialog(`#${id}`);
-    state.dialogStack = desiredDialogs;
   } finally { applyingNavigationState = false; }
 }
 
 function handleNavigationPop(event) {
+  if (document.querySelector("dialog[open]") && modalNavigationState) {
+    history.pushState({ [APP_NAVIGATION_KEY]: modalNavigationState }, "");
+    return;
+  }
   if (pendingRootView) {
     const view = pendingRootView;
     pendingRootView = null;
@@ -1236,11 +1217,9 @@ function handleNavigationPop(event) {
     try { switchView(view); }
     finally { applyingNavigationState = false; }
     replaceNavigationEntry(0);
-    finishPendingNavigation();
     return;
   }
   applyNavigationState(event.state?.[APP_NAVIGATION_KEY]);
-  finishPendingNavigation();
 }
 
 function initializeNavigation() {
@@ -1329,7 +1308,7 @@ function bindEvents() {
   window.addEventListener("orientationchange", schedulePortraitSafeTopSync);
   document.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => closeDialog(button.closest("dialog")))); document.querySelectorAll("dialog").forEach((dialog) => {
     dialog.addEventListener("close", () => queueMicrotask(syncModalState));
-    dialog.addEventListener("cancel", (event) => { event.preventDefault(); closeDialog(dialog); });
+    dialog.addEventListener("cancel", (event) => event.preventDefault());
   });
   document.querySelectorAll("dialog.sheet").forEach((dialog) => dialog.addEventListener("click", (event) => { if (event.target === dialog) closeDialog(dialog); }));
   document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click", () => { if (button.dataset.view === "settings") navigateToSettings(); else navigateRootView(button.dataset.view); }));

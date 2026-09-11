@@ -777,7 +777,7 @@ test("PWA разрешает портретную и альбомную орие
   assert.equal(manifest.orientation, "any");
 });
 
-test("вложенные экраны и диалоги участвуют в системной истории", () => {
+test("вложенные экраны участвуют в системной истории, а диалоги блокируют системный возврат", () => {
   const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
   assert.match(app, /const ROOT_VIEWS = new Set\(\["diary", "stats", "medications", "directories"\]\)/);
   assert.match(app, /function pushNavigationEntry\(\) \{ history\.pushState/);
@@ -786,7 +786,9 @@ test("вложенные экраны и диалоги участвуют в с
   assert.match(app, /state\.statsMetric = card\.dataset\.metric; renderStatistics\(\); scrollPageToTop\(\); pushNavigationEntry\(\)/);
   assert.match(app, /elements\.directoriesBack\.addEventListener\("click", navigateBack\)/);
   assert.match(app, /elements\.statsBack\.addEventListener\("click", navigateBack\)/);
-  assert.match(app, /dialog\.addEventListener\("cancel", \(event\) => \{ event\.preventDefault\(\); closeDialog\(dialog\); \}\)/);
+  assert.match(app, /dialog\.addEventListener\("cancel", \(event\) => event\.preventDefault\(\)\)/);
+  assert.match(app, /document\.querySelector\("dialog\[open\]"\) && modalNavigationState[\s\S]+history\.pushState/);
+  assert.doesNotMatch(app, /dialogStack|dialogs: \[/);
 });
 
 test("ползунки боли используют общий компонент и насыщенный градиент", () => {
