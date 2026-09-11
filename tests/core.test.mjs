@@ -299,8 +299,8 @@ test("backup версии 4 проверяет профиль, глюкозу и
 test("рост и вес вводятся и отображаются с одним десятичным знаком", () => {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
-  assert.match(html, /id="weight-value"[^>]+inputmode="decimal"[^>]+step="0\.1"/);
-  assert.match(html, /id="profile-height"[^>]+inputmode="decimal"[^>]+step="0\.1"/);
+  assert.match(html, /id="weight-value"[^>]+type="text"[^>]+inputmode="decimal"/);
+  assert.match(html, /id="profile-height"[^>]+type="text"[^>]+inputmode="decimal"/);
   assert.match(app, /function formatMetricOneDecimal\(value\) \{ return Number\.isFinite\(value\) \? Number\(value\)\.toFixed\(1\) : "—"; \}/);
   assert.match(app, /formatMetricOneDecimal\(profile\.heightCm\)[\s\S]+formatMetricOneDecimal\(current\.weight\)/);
   assert.match(app, /formatMetricOneDecimal\(stats\.current\.weight\)[\s\S]+formatMetricOneDecimal\(stats\.min\)[\s\S]+formatMetricOneDecimal\(stats\.max\)/);

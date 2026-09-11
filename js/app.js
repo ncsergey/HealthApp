@@ -391,7 +391,7 @@ function evaluatePulseRecord(record) { const context = record.context || "unknow
 function validateWeightInput(value) {
   const raw = String(value).trim();
   const weight = Number(raw.replace(",", "."));
-  if (!/^\d+(?:[.,]\d)?$/.test(raw) || !Number.isFinite(weight) || weight < 1 || weight > 700) return { error: "Допустимое значение веса: 1–700 кг, один знак после точки" };
+  if (!/^\d+(?:[.,]\d)?$/.test(raw) || !Number.isFinite(weight) || weight < 1 || weight > 700) return { error: "Допустимое значение веса: 1–700 кг, один знак после запятой или точки" };
   return { weight };
 }
 
@@ -752,7 +752,7 @@ async function saveProfileForm(event) {
   const birthDate = document.querySelector("#profile-birth-date").value; const sex = document.querySelector("#profile-sex").value; const heightRaw = document.querySelector("#profile-height").value.trim(); const heightCm = Number(heightRaw.replace(",", "."));
   if (!validBirthDate(birthDate)) { errorNode.textContent = "Укажите реальную дату рождения, не позднее сегодняшней."; return; }
   if (!['male', 'female'].includes(sex)) { errorNode.textContent = "Выберите пол."; return; }
-  if (!/^\d+(?:[.,]\d)?$/.test(heightRaw) || !Number.isFinite(heightCm) || heightCm < 50 || heightCm > 300) { errorNode.textContent = "Рост должен быть от 50 до 300 см с одним знаком после точки."; return; }
+  if (!/^\d+(?:[.,]\d)?$/.test(heightRaw) || !Number.isFinite(heightCm) || heightCm < 50 || heightCm > 300) { errorNode.textContent = "Рост должен быть от 50 до 300 см с одним знаком после запятой или точки."; return; }
   try {
     setBusy(button, true); const editedAt = new Date().toISOString(); const profile = { id: "profile", birthDate, sex, heightCm, editedAt };
     await saveProfile(profile);
