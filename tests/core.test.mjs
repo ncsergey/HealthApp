@@ -6,7 +6,7 @@ import { isFuture, moscowDateTimeInputToIso, moscowInputToIso } from "../js/date
 import { parseBackupFile } from "../js/import.js";
 import { ageOnDate, calculateBmi, evaluateBmi, evaluateGlucose, evaluatePressure, evaluatePulse, isBirthdayOnDate } from "../js/medical.js";
 import { formatMedicationDose, hasOngoingPainForBodyPart, normalizedNameKey, parseMedicationAmount } from "../js/pain.js";
-import { filterDataForPeriod, glucoseStats, headacheStats, overviewStats, pressureStats, pulseStats, weightStats } from "../js/statistics.js";
+import { filterDataForPeriod, glucoseStats, headacheStats, overviewStats, pressureStats, pulseStats, stepsStats, temperatureStats, weightStats } from "../js/statistics.js";
 import { buildDaySchedule, dayPartForTime, formatMedicationExpirationRemaining, formatMedicationNameWithExpiration, isCourseCompletedOn, medicationExpirationStatus, medicationStatistics, normalizeSchedule, validateMedicationCourse } from "../js/medications.js";
 import { createBackupPayload } from "../js/export.js";
 import { DEFAULT_GLASS_BLUR_INTENSITY, DEFAULT_GLASS_TRANSPARENCY, DEFAULT_THEME, UI_SETTINGS_KEY, UI_THEME_KEY, applyGlassBlurIntensity, applyGlassTransparency, applyTheme, applyUiSettings, initializeTheme, initializeUiSettings, readTheme, readUiSettings, saveTheme, saveUiSettings } from "../js/interface-settings.js";
@@ -203,12 +203,36 @@ test("статистика веса использует даты измерен
   assert.equal(stats.change, -19);
 });
 
-test("фильтрация периода включает пульс, глюкозу и вес", () => {
-  const data = { profile: null, pressureMeasurements: [], pulseMeasurements: [{ measuredAt: "2026-08-10T09:00:00Z" }], headacheEpisodes: [], glucoseMeasurements: [{ measuredAt: "2026-08-10T08:00:00Z" }], weightMeasurements: [{ measuredAt: "2026-08-11T08:00:00Z" }] };
+test("статистика температуры и шагов рассчитывает сводные значения", () => {
+  const temperature = temperatureStats([
+    { measuredAt: "2026-08-10T08:00:00.000Z", temperature: 36.5 },
+    { measuredAt: "2026-08-11T08:00:00.000Z", temperature: 37 }
+  ]);
+  assert.equal(temperature.current.temperature, 37);
+  assert.equal(temperature.average, 36.8);
+  assert.equal(temperature.min, 36.5);
+  assert.equal(temperature.max, 37);
+
+  const steps = stepsStats([
+    { measuredDate: "2026-08-10", editedAt: "2026-08-10T20:00:00.000Z", steps: 1000 },
+    { measuredDate: "2026-08-12", editedAt: "2026-08-12T20:00:00.000Z", steps: 5000 },
+    { measuredDate: "2026-08-11", editedAt: "2026-08-11T20:00:00.000Z", steps: 2500 }
+  ]);
+  assert.equal(steps.current.steps, 5000);
+  assert.equal(steps.average, 2833);
+  assert.equal(steps.min, 1000);
+  assert.equal(steps.max, 5000);
+  assert.equal(steps.total, 8500);
+});
+
+test("фильтрация периода включает все дополнительные показатели", () => {
+  const data = { profile: null, pressureMeasurements: [], pulseMeasurements: [{ measuredAt: "2026-08-10T09:00:00Z" }], headacheEpisodes: [], glucoseMeasurements: [{ measuredAt: "2026-08-10T08:00:00Z" }], weightMeasurements: [{ measuredAt: "2026-08-11T08:00:00Z" }], temperatureMeasurements: [{ measuredAt: "2026-08-10T10:00:00Z" }], stepsMeasurements: [{ measuredDate: "2026-08-10" }] };
   const filtered = filterDataForPeriod(data, { start: new Date("2026-08-10T00:00:00Z"), end: new Date("2026-08-10T23:59:59Z") });
   assert.equal(filtered.pulseMeasurements.length, 1);
   assert.equal(filtered.glucoseMeasurements.length, 1);
   assert.equal(filtered.weightMeasurements.length, 0);
+  assert.equal(filtered.temperatureMeasurements.length, 1);
+  assert.equal(filtered.stepsMeasurements.length, 1);
 });
 
 test("импорт поддерживает резервные копии версий 1–3", async () => {
@@ -337,6 +361,17 @@ test("температура и шаги доступны как полноце�
   await assert.rejects(() => parseBackupFile(backupFile(preciseTemperature)), /Температура вне диапазона/);
   const fractionalSteps = structuredClone(payload); fractionalSteps.stepsMeasurements[0].steps = 5684.5;
   await assert.rejects(() => parseBackupFile(backupFile(fractionalSteps)), /Количество шагов вне диапазона/);
+});
+
+test("температура и шаги отображаются в обзоре и детальной статистике", () => {
+  const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
+  const charts = readFileSync(new URL("../js/charts.js", import.meta.url), "utf8");
+  assert.match(app, /overviewCard\("temperature", "🌡️", "Температура"[\s\S]+overviewCard\("steps", "👟", "Шаги"/);
+  assert.match(app, /function renderTemperatureStatistics\(bounds\)[\s\S]+Температура во времени/);
+  assert.match(app, /function renderStepsStatistics\(bounds\)[\s\S]+Всего за период[\s\S]+Шаги по дням/);
+  assert.match(app, /temperature: renderTemperatureStatistics, steps: renderStepsStatistics/);
+  assert.match(app, /\["overview", "pressure", "pulse", "glucose", "weight", "temperature", "steps", "pain"\]/);
+  assert.match(charts, /item\.measuredDate \? `\$\{item\.measuredDate\}T09:00:00\.000Z`/);
 });
 
 test("названия справочников и количество лекарства нормализуются", () => {

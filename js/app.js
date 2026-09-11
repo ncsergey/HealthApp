@@ -3,7 +3,7 @@ import { formatDayLabel, formatDuration, formatTime, getDateKey, getMoscowFields
 import { drawTimeChart } from "./charts.js";
 import { exportCsv, exportJson } from "./export.js";
 import { parseBackupFile } from "./import.js";
-import { filterDataForPeriod, glucoseStats, painStats, pressureStats, pulseStats, weightStats } from "./statistics.js";
+import { filterDataForPeriod, glucoseStats, painStats, pressureStats, pulseStats, stepsStats, temperatureStats, weightStats } from "./statistics.js";
 import { ageOnDate, calculateBmi, evaluateBmi, evaluateGlucose, evaluatePressure, evaluatePulse, isBirthdayOnDate } from "./medical.js";
 import { createElement as el, debounce, finiteInteger, makeId } from "./utils.js";
 import { DEFAULT_BODY_PARTS, UNIT_BY_ID, directoryItemById, formatMedicationAmount, formatMedicationDose, hasOngoingPainForBodyPart, normalizedNameKey, parseMedicationAmount, validateDirectoryName } from "./pain.js";
@@ -974,7 +974,7 @@ function chart(title, ariaLabel, items, series, legend = []) {
 }
 
 function renderOverview(bounds) {
-  const filtered = filterDataForPeriod(state.data, bounds); const p = pressureStats(filtered.pressureMeasurements); const q = pulseStats(filtered.pulseMeasurements); const g = glucoseStats(filtered.glucoseMeasurements); const w = weightStats(filtered.weightMeasurements); const h = painStats(filtered.painEpisodes, new Date(), state.data);
+  const filtered = filterDataForPeriod(state.data, bounds); const p = pressureStats(filtered.pressureMeasurements); const q = pulseStats(filtered.pulseMeasurements); const g = glucoseStats(filtered.glucoseMeasurements); const w = weightStats(filtered.weightMeasurements); const t = temperatureStats(filtered.temperatureMeasurements); const s = stepsStats(filtered.stepsMeasurements); const h = painStats(filtered.painEpisodes, new Date(), state.data);
   const pulseContexts = new Set(filtered.pulseMeasurements.map((item) => item.context || "unknown"));
   let glucoseNote = ""; let glucoseValue = g ? `${formatGlucose(g.average)} ммоль/л` : "—";
   if (g) {
@@ -986,7 +986,9 @@ function renderOverview(bounds) {
     overviewCard("pressure", "🩺", "Давление", p ? `${p.avgSystolic} / ${p.avgDiastolic}` : "—", filtered.pressureMeasurements.length),
     overviewCard("pulse", "💓", "Пульс", q ? `${q.average} уд/мин` : "—", filtered.pulseMeasurements.length, q && pulseContexts.size === 1 ? PULSE_CONTEXT[[...pulseContexts][0]].toLowerCase() : q ? "смешанные контексты" : ""),
     overviewCard("glucose", "🩸", "Глюкоза", glucoseValue, filtered.glucoseMeasurements.length, glucoseNote),
-    overviewCard("weight", "⚖️", "Вес", w ? `${formatMetricOneDecimal(w.current.weight)} кг` : "—", filtered.weightMeasurements.length)
+    overviewCard("weight", "⚖️", "Вес", w ? `${formatMetricOneDecimal(w.current.weight)} кг` : "—", filtered.weightMeasurements.length),
+    overviewCard("temperature", "🌡️", "Температура", t ? `${formatMetricOneDecimal(t.current.temperature)} °C` : "—", filtered.temperatureMeasurements.length),
+    overviewCard("steps", "👟", "Шаги", s ? `${s.current.steps} шагов` : "—", filtered.stepsMeasurements.length)
   ]));
 }
 
@@ -1045,6 +1047,20 @@ function renderWeightStatistics(bounds) {
   if (state.data.profile?.heightCm) elements.statsContent.append(chart("ИМТ во времени", "График индекса массы тела", items, [{ value: (item) => calculateBmi(item.weight, state.data.profile.heightCm), color: "--primary", fallback: "#167b68" }]));
 }
 
+function renderTemperatureStatistics(bounds) {
+  const items = filterDataForPeriod(state.data, bounds).temperatureMeasurements; const stats = temperatureStats(items); detailHeading("Температура");
+  if (!stats) { elements.statsContent.append(emptyState("За выбранный период данных нет", "Добавьте измерения или выберите другой период.", "📊")); return; }
+  elements.statsContent.append(el("div", { className: "stats-grid" }, [statCard("Последнее измерение", `${formatMetricOneDecimal(stats.current.temperature)} °C`), statCard("Средняя температура", `${formatMetricOneDecimal(stats.average)} °C`), statCard("Минимум / максимум", `${formatMetricOneDecimal(stats.min)} / ${formatMetricOneDecimal(stats.max)} °C`), statCard("Измерений", String(stats.count))]));
+  elements.statsContent.append(chart("Температура во времени", "График температуры", items, [{ value: (item) => item.temperature, color: "--temperature", fallback: "#b84b3f" }]));
+}
+
+function renderStepsStatistics(bounds) {
+  const items = filterDataForPeriod(state.data, bounds).stepsMeasurements; const stats = stepsStats(items); detailHeading("Шаги");
+  if (!stats) { elements.statsContent.append(emptyState("За выбранный период данных нет", "Добавьте шаги или выберите другой период.", "📊")); return; }
+  elements.statsContent.append(el("div", { className: "stats-grid" }, [statCard("Последняя запись", `${stats.current.steps} шагов`), statCard("Среднее за день", `${stats.average} шагов`), statCard("Минимум / максимум", `${stats.min} / ${stats.max} шагов`), statCard("Всего за период", `${stats.total} шагов`), statCard("Дней с данными", String(stats.count), "", true)]));
+  elements.statsContent.append(chart("Шаги по дням", "График шагов по дням", items, [{ value: (item) => item.steps, color: "--steps", fallback: "#376c9f" }]));
+}
+
 function painBodyPartFilter() {
   const select = el("select", { id: "pain-body-part-filter" }, [el("option", { value: "all", text: "Все части тела" }), ...state.data.bodyParts.map((item) => el("option", { value: item.id, text: item.name }))]);
   select.value = state.painBodyPart; return el("div", { className: "stat-filters" }, [el("label", { className: "field" }, [el("span", { text: "Часть тела" }), select])]);
@@ -1066,7 +1082,7 @@ function renderStatistics() {
   for (const observer of state.chartObservers) observer.disconnect(); state.chartObservers = []; elements.statsContent.replaceChildren(); elements.statsSubfilters.replaceChildren(); elements.statsSubfilters.hidden = true; elements.statsBack.hidden = state.statsMetric === "overview";
   let bounds; try { bounds = getPeriodBounds(elements.statsPeriod.value, elements.periodStart.value, elements.periodEnd.value); } catch (error) { elements.statsContent.append(emptyState("Некорректный период", error.message, "⚠️")); return; }
   if (bounds.incomplete) { elements.statsContent.append(emptyState("Выберите обе даты", "Укажите начало и окончание своего периода.", "📊")); return; } if (bounds.invalid) { elements.statsContent.append(emptyState("Некорректный период", "Дата начала не может быть позже даты окончания.", "⚠️")); return; }
-  ({ overview: renderOverview, pressure: renderPressureStatistics, pulse: renderPulseStatistics, glucose: renderGlucoseStatistics, weight: renderWeightStatistics, pain: renderPainStatistics })[state.statsMetric](bounds);
+  ({ overview: renderOverview, pressure: renderPressureStatistics, pulse: renderPulseStatistics, glucose: renderGlucoseStatistics, weight: renderWeightStatistics, temperature: renderTemperatureStatistics, steps: renderStepsStatistics, pain: renderPainStatistics })[state.statsMetric](bounds);
 }
 
 function medicationName(id) { return directoryItemById(state.data.medications, id)?.name || "Неизвестное лекарство"; }
@@ -1261,7 +1277,7 @@ function applyNavigationState(next) {
       state.activeDirectory = next.directory;
       renderDirectories();
     }
-    if (next.view === "stats" && ["overview", "pressure", "pulse", "glucose", "weight", "pain"].includes(next.statsMetric)) {
+    if (next.view === "stats" && ["overview", "pressure", "pulse", "glucose", "weight", "temperature", "steps", "pain"].includes(next.statsMetric)) {
       state.statsMetric = next.statsMetric;
       renderStatistics();
     }

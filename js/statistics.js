@@ -15,7 +15,9 @@ export function filterDataForPeriod(data, bounds) {
     painEpisodes: painEpisodes.filter((item) => inRange(item.startedAt, bounds)),
     headacheEpisodes: painEpisodes.filter((item) => inRange(item.startedAt, bounds)),
     glucoseMeasurements: (data.glucoseMeasurements || []).filter((item) => inRange(item.measuredAt, bounds)),
-    weightMeasurements: (data.weightMeasurements || []).filter((item) => inRange(item.measuredAt, bounds))
+    weightMeasurements: (data.weightMeasurements || []).filter((item) => inRange(item.measuredAt, bounds)),
+    temperatureMeasurements: (data.temperatureMeasurements || []).filter((item) => inRange(item.measuredAt, bounds)),
+    stepsMeasurements: (data.stepsMeasurements || []).filter((item) => inRange(`${item.measuredDate}T09:00:00.000Z`, bounds))
   };
 }
 
@@ -74,6 +76,20 @@ export function weightStats(items) {
     change: sorted.at(-1).weight - sorted[0].weight,
     min: Math.min(...weights), max: Math.max(...weights)
   };
+}
+
+export function temperatureStats(items) {
+  if (!items.length) return null;
+  const sorted = [...items].sort((a, b) => new Date(a.measuredAt) - new Date(b.measuredAt));
+  const values = sorted.map((item) => item.temperature);
+  return { count: sorted.length, current: sorted.at(-1), average: rounded(mean(sorted, (item) => item.temperature), 1), min: Math.min(...values), max: Math.max(...values) };
+}
+
+export function stepsStats(items) {
+  if (!items.length) return null;
+  const sorted = [...items].sort((a, b) => a.measuredDate.localeCompare(b.measuredDate) || a.editedAt.localeCompare(b.editedAt));
+  const values = sorted.map((item) => item.steps);
+  return { count: sorted.length, current: sorted.at(-1), average: rounded(mean(sorted, (item) => item.steps)), min: Math.min(...values), max: Math.max(...values), total: values.reduce((sum, value) => sum + value, 0) };
 }
 
 function daysCoveredByEpisode(episode, upperBound) {
@@ -145,6 +161,8 @@ export function overviewStats(data, bounds) {
     headacheCount: filtered.painEpisodes.length,
     glucoseCount: filtered.glucoseMeasurements.length,
     weightCount: filtered.weightMeasurements.length,
+    temperatureCount: filtered.temperatureMeasurements.length,
+    stepsCount: filtered.stepsMeasurements.length,
     overall: pressureStats(filtered.pressureMeasurements), during: pressureStats(during), outside: pressureStats(outside)
   };
 }

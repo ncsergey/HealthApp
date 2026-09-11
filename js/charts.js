@@ -26,7 +26,7 @@ export function drawTimeChart(canvas, items, series, emptyMessage = "Недос�
     return;
   }
 
-  const timeValue = (item) => item.measuredAt || item.startedAt;
+  const timeValue = (item) => item.measuredAt || item.startedAt || (item.measuredDate ? `${item.measuredDate}T09:00:00.000Z` : null);
   const sorted = [...items].sort((a, b) => new Date(timeValue(a)) - new Date(timeValue(b)));
   const values = sorted.flatMap((item) => series.map((line) => line.value(item))).filter(Number.isFinite);
   let minValue = Math.min(...values);
