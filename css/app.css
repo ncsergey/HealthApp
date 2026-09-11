@@ -235,6 +235,8 @@ dialog.form-sheet { overflow-y: auto; }
 }
 .fixed-header-dialog > .dialog-layout { grid-template-rows: auto minmax(0, 1fr); }
 .fixed-footer-dialog > .dialog-layout { grid-template-rows: minmax(0, 1fr) auto; }
+#entry-type-dialog { height: 75dvh; }
+#entry-type-dialog > .dialog-layout { height: 100%; max-height: none; }
 .entry-form-dialog .dialog-header, .entry-form-dialog .dialog-actions { flex: 0 0 auto; }
 .entry-form-dialog .dialog-header { margin-bottom: 18px; }
 .entry-form-dialog .dialog-actions { margin-top: 0; padding-top: 18px; }

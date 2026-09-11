@@ -776,6 +776,7 @@ test("современные формы используют плавающие 
 
 test("оставшиеся диалоги распределены по схемам фиксированных панелей", () => {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
   const dialog = (id) => {
     const start = html.indexOf(`<dialog id="${id}"`);
     const end = html.indexOf("</dialog>", start);
@@ -794,6 +795,10 @@ test("оставшиеся диалоги распределены по схем
   assert.match(entryTypeDialog, /class="sheet compact-choice-sheet fixed-header-dialog"/);
   assert.match(entryTypeDialog, /class="dialog-header"[\s\S]+class="dialog-scroll-content"/);
   assert.doesNotMatch(entryTypeDialog, /class="dialog-actions"/);
+  assert.match(css, /#entry-type-dialog \{ height: 75dvh; \}/);
+  assert.match(css, /#entry-type-dialog > \.dialog-layout \{ height: 100%; max-height: none; \}/);
+  assert.match(css, /\.fixed-header-dialog > \.dialog-layout \{ grid-template-rows: auto minmax\(0, 1fr\); \}/);
+  assert.match(css, /\.dialog-scroll-content \{[\s\S]+overflow-y: auto;/);
   for (const id of ["confirm-dialog", "backup-prompt-dialog"]) {
     const markup = dialog(id);
     assert.match(markup, /class="[^"]*fixed-footer-dialog[^"]*"/);
