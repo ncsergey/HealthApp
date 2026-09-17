@@ -24,7 +24,7 @@ const STORE_BY_KIND = Object.freeze({ pressure: STORES.pressure, pulse: STORES.p
 const DIRECTORY_META = Object.freeze({ bodyParts: { title: "Части тела", icon: "🧍" }, medications: { title: "Препараты", icon: "💊" } });
 const APP_NAVIGATION_KEY = "myhealthNavigation";
 const ROOT_VIEWS = new Set(["diary", "stats", "medications", "directories"]);
-const SETTINGS_CHILD_VIEWS = new Set(["profile", "interface", "backup", "about"]);
+const SETTINGS_CHILD_VIEWS = new Set(["profile", "interface", "backup"]);
 const ABOUT_CHILD_VIEWS = new Set(["changes", "description", "features"]);
 let backupPendingFallback = false;
 let backupReminderDismissedFallback = false;
@@ -1307,8 +1307,12 @@ function switchView(view, { scrollToTop = true } = {}) {
   if (!views[view]) return;
   state.activeView = view;
   for (const [name, section] of Object.entries(views)) section.hidden = name !== view;
-  const settingsActive = view === "settings" || SETTINGS_CHILD_VIEWS.has(view) || ABOUT_CHILD_VIEWS.has(view);
+  const settingsActive = view === "settings" || SETTINGS_CHILD_VIEWS.has(view);
   document.querySelectorAll("[data-view]").forEach((button) => { const active = button.dataset.view === view || (button.hasAttribute("data-settings-root") && settingsActive); button.classList.toggle("active", active); if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current"); });
+  const aboutButton = document.querySelector("#brand-icon-container");
+  const aboutActive = view === "about" || ABOUT_CHILD_VIEWS.has(view);
+  aboutButton.classList.toggle("active", aboutActive);
+  if (aboutActive) aboutButton.setAttribute("aria-current", "page"); else aboutButton.removeAttribute("aria-current");
   if (view === "stats") { state.statsMetric = "overview"; renderStatistics(); }
   if (view === "profile") renderProfile();
   if (view === "interface") renderInterfaceSettings();
@@ -1333,9 +1337,16 @@ function navigateRootView(view) {
 function navigateToSettings() {
   if (state.activeView === "settings") return;
   if (SETTINGS_CHILD_VIEWS.has(state.activeView)) { navigateBack(); return; }
-  if (ABOUT_CHILD_VIEWS.has(state.activeView)) { saveCurrentNavigationScroll(); history.go(-2); return; }
   saveCurrentNavigationScroll();
   switchView("settings");
+  pushNavigationEntry();
+}
+
+function navigateToAbout() {
+  if (state.activeView === "about") return;
+  if (ABOUT_CHILD_VIEWS.has(state.activeView)) { navigateBack(); return; }
+  saveCurrentNavigationScroll();
+  switchView("about");
   pushNavigationEntry();
 }
 
@@ -1363,7 +1374,7 @@ function navigateBack() {
 
 function applyNavigationState(next) {
   if (!next || next.version !== 1) return;
-  const validView = ROOT_VIEWS.has(next.view) || next.view === "settings" || SETTINGS_CHILD_VIEWS.has(next.view) || ABOUT_CHILD_VIEWS.has(next.view);
+  const validView = ROOT_VIEWS.has(next.view) || next.view === "settings" || next.view === "about" || SETTINGS_CHILD_VIEWS.has(next.view) || ABOUT_CHILD_VIEWS.has(next.view);
   if (!validView) return;
   applyingNavigationState = true;
   try {
@@ -1497,6 +1508,7 @@ function bindEvents() {
   });
   document.querySelectorAll("dialog.sheet").forEach((dialog) => dialog.addEventListener("click", (event) => { if (event.target === dialog) closeDialog(dialog); }));
   document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click", () => { if (button.dataset.view === "settings") navigateToSettings(); else navigateRootView(button.dataset.view); }));
+  document.querySelector("#brand-icon-container").addEventListener("click", navigateToAbout);
   document.querySelectorAll("[data-settings-target]").forEach((button) => button.addEventListener("click", () => navigateToSettingsChild(button.dataset.settingsTarget)));
   document.querySelectorAll("[data-about-target]").forEach((button) => button.addEventListener("click", () => navigateToAboutChild(button.dataset.aboutTarget)));
   document.querySelector("#profile-back").addEventListener("click", navigateBack); document.querySelector("#interface-back").addEventListener("click", navigateBack); document.querySelector("#backup-back").addEventListener("click", navigateBack); document.querySelector("#about-back").addEventListener("click", navigateBack); document.querySelectorAll(".about-child-back").forEach((button) => button.addEventListener("click", navigateBack));
