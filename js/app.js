@@ -36,6 +36,7 @@ let confirmedPortraitSafeTop = null;
 let portraitSafeTopCandidate = null;
 let portraitSafeTopCandidateCount = 0;
 let portraitSafeTopTimers = [];
+let pageScrollRestoreId = 0;
 const loadAppInfoOnce = createAppInfoLoader();
 const loadChangesOnce = createChangeLoader();
 
@@ -324,6 +325,7 @@ function pageScrollContainer() {
 }
 
 function scrollPageToTop(behavior = "smooth") {
+  pageScrollRestoreId += 1;
   const scroller = pageScrollContainer();
   if (scroller === document.scrollingElement) window.scrollTo({ top: 0, behavior });
   else scroller?.scrollTo({ top: 0, behavior });
@@ -336,13 +338,16 @@ function currentPageScrollTop() {
 
 function restorePageScroll(top) {
   const scrollTop = Number.isFinite(top) && top >= 0 ? top : 0;
+  const restoreId = ++pageScrollRestoreId;
   const restore = () => {
+    if (restoreId !== pageScrollRestoreId) return;
     const scroller = pageScrollContainer();
     if (scroller === document.scrollingElement) window.scrollTo({ top: scrollTop, behavior: "auto" });
     else scroller?.scrollTo({ top: scrollTop, behavior: "auto" });
   };
   restore();
-  requestAnimationFrame(restore);
+  requestAnimationFrame(() => { restore(); requestAnimationFrame(restore); });
+  setTimeout(restore, 80);
 }
 
 function syncModalState() {
@@ -1349,7 +1354,11 @@ function navigateToAboutChild(view) {
 }
 
 function navigateBack() {
-  if ((navigationState()?.depth || 0) > 0) { saveCurrentNavigationScroll(); history.back(); }
+  if ((navigationState()?.depth || 0) > 0) {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    saveCurrentNavigationScroll();
+    history.back();
+  }
 }
 
 function applyNavigationState(next) {
@@ -1421,6 +1430,15 @@ async function postponeBackupPrompt() { const suppress = document.querySelector(
 async function requestPersistentStorage() { if (!navigator.storage?.persist) return; try { elements.storageWarning.hidden = await navigator.storage.persist(); } catch { elements.storageWarning.hidden = false; } }
 function markApplicationUpdateReady() {
   const version = document.querySelector("#app-version"); version.disabled = false; version.classList.add("update-ready"); version.setAttribute("aria-label", `${version.textContent}: доступна новая версия, нажмите для обновления`); version.title = "Нажмите, чтобы обновить приложение";
+}
+
+function applyApplicationUpdate() {
+  const version = document.querySelector("#app-version");
+  if (!version.classList.contains("update-ready")) return;
+  version.disabled = true;
+  version.setAttribute("aria-label", `${version.textContent}: приложение обновляется`);
+  version.title = "Приложение обновляется";
+  window.location.reload();
 }
 
 function registerServiceWorker() {
@@ -1518,7 +1536,7 @@ function bindEvents() {
   document.querySelector("#export-csv").addEventListener("click", async () => { try { if (await exportCsv(state.data)) showToast("CSV подготовлены"); } catch (error) { showError(document.querySelector("#data-error"), error); } });
   document.querySelector("#export-json").addEventListener("click", async () => { try { if (await exportJson(state.data, state.uiSettings)) { clearBackupPending(); showToast("Резервная копия подготовлена"); } } catch (error) { showError(document.querySelector("#data-error"), error); } });
   document.querySelector("#backup-save").addEventListener("click", savePromptedBackup); document.querySelector("#backup-later").addEventListener("click", postponeBackupPrompt);
-  document.querySelector("#app-version").addEventListener("click", (event) => { if (event.currentTarget.classList.contains("update-ready")) window.location.reload(); });
+  document.querySelector("#app-version").addEventListener("click", applyApplicationUpdate);
   document.querySelector("#import-file").addEventListener("change", handleImportFile); document.querySelector("#import-merge").addEventListener("click", mergeImport); document.querySelector("#import-replace").addEventListener("click", replaceImport); window.addEventListener("online", updateOnlineStatus); window.addEventListener("offline", updateOnlineStatus);
 }
 

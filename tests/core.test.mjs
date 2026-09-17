@@ -906,6 +906,8 @@ test("возврат на предыдущий экран восстанавли
   assert.match(app, /function navigationSnapshot\([\s\S]+scrollTop = currentPageScrollTop\(\)[\s\S]+scrollTop/);
   assert.match(app, /function saveCurrentNavigationScroll\(\)[\s\S]+history\.replaceState\(navigationSnapshot\(current\.depth, currentPageScrollTop\(\)\)/);
   assert.match(app, /function applyNavigationState\(next\)[\s\S]+switchView\(next\.view, \{ scrollToTop: false \}\)[\s\S]+restorePageScroll\(next\.scrollTop\)/);
+  assert.match(app, /function navigateBack\(\)[\s\S]+document\.activeElement\.blur\(\)[\s\S]+history\.back\(\)/);
+  assert.match(app, /function restorePageScroll\(top\)[\s\S]+requestAnimationFrame\(\(\) => \{ restore\(\); requestAnimationFrame\(restore\); \}\)[\s\S]+setTimeout\(restore, 80\)/);
   assert.match(app, /history\.scrollRestoration = "manual"/);
 });
 
@@ -1073,6 +1075,18 @@ test("раздел «О программе» встроен в навигаци�
   assert.match(serviceWorker, /"\.\/CHANGE\.md"/);
   assert.match(serviceWorker, /"\.\/js\/app-info\.js"/);
   assert.match(updateServiceWorkerCacheName(serviceWorker, "test123"), /health-app-static-test123/);
+});
+
+test("обновление PWA выделяет текущую версию и загружает свежую сборку по нажатию", () => {
+  const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
+  const serviceWorker = readFileSync(new URL("../sw.js", import.meta.url), "utf8");
+  assert.match(css, /\.app-version\.update-ready \{[^}]+color: var\(--danger\)/);
+  assert.match(app, /controllerchange[\s\S]+markApplicationUpdateReady\(\)/);
+  assert.match(app, /function applyApplicationUpdate\(\)[\s\S]+classList\.contains\("update-ready"\)[\s\S]+window\.location\.reload\(\)/);
+  assert.match(app, /addEventListener\("click", applyApplicationUpdate\)/);
+  assert.match(serviceWorker, /new Request\(new URL\(path, self\.registration\.scope\), \{ cache: "reload" \}\)/);
+  assert.match(serviceWorker, /caches\.open\(CACHE_NAME\)[\s\S]+cache\.match\(request/);
 });
 
 test("метаданные приложения не попадают в пользовательскую резервную копию", () => {

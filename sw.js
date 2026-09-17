@@ -1,4 +1,4 @@
-const CACHE_NAME = "health-app-static-88a5d8faa90b";
+const CACHE_NAME = "health-app-static-1946a3710aba";
 const CACHE_PREFIX = "health-app-static-";
 const APP_SHELL = [
   "./",
@@ -30,7 +30,7 @@ const indexUrl = new URL("./index.html", self.registration.scope).href;
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(APP_SHELL))
+      .then((cache) => cache.addAll(APP_SHELL.map((path) => new Request(new URL(path, self.registration.scope), { cache: "reload" }))))
       .then(() => self.skipWaiting())
   );
 });
@@ -52,10 +52,10 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
 
   if (request.mode === "navigate") {
-    event.respondWith(caches.match(indexUrl).then((cached) => cached || fetch(request)));
+    event.respondWith(caches.open(CACHE_NAME).then((cache) => cache.match(indexUrl)).then((cached) => cached || fetch(request)));
     return;
   }
 
   if (!shellUrls.has(url.href)) return;
-  event.respondWith(caches.match(request, { ignoreSearch: true }).then((cached) => cached || fetch(request)));
+  event.respondWith(caches.open(CACHE_NAME).then((cache) => cache.match(request, { ignoreSearch: true })).then((cached) => cached || fetch(request)));
 });
