@@ -1334,17 +1334,6 @@ html .unified-range-control > input[type="range"] {
   .medication-date-controls, .selected-date-label, .medication-today > .empty-state { grid-column: 1 / -1; }
   .directories-content { width: min(100%, 820px); margin-inline: auto; }
   .chart-card canvas { height: 260px; }
-  .bottom-nav {
-    right: auto;
-    bottom: max(16px, var(--safe-bottom));
-    left: 50%;
-    width: min(720px, calc(100% - 32px));
-    padding: 7px;
-    transform: translateX(-50%);
-    border: 1px solid var(--line);
-    border-radius: 20px;
-    box-shadow: var(--shadow);
-  }
 }
 
 /* Modern landscape keeps the same symmetric floating chrome as portrait. */
