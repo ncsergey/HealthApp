@@ -1324,6 +1324,10 @@ html .unified-range-control > input[type="range"] {
     padding-right: max(24px, calc((100vw - 1120px) / 2));
     padding-left: max(24px, calc((100vw - 1120px) / 2));
   }
+  html[data-interface="classic"] .bottom-nav {
+    padding-right: max(24px, calc((100vw - 1120px) / 2));
+    padding-left: max(24px, calc((100vw - 1120px) / 2));
+  }
   .app-main { width: min(100%, 1120px); padding-inline: 24px; }
   html[data-interface="modern"] .app-content { padding-right: 24px; padding-left: 24px; }
   .timeline, .overview-grid, .course-list, .medication-history, .directory-picker-list {

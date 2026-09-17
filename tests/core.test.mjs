@@ -749,6 +749,14 @@ test("в современном интерфейсе шапка и нижнее 
   assert.doesNotMatch(css, /html\[data-interface="modern"\] \.bottom-nav \{[\s\S]{0,300}width: 78px/);
 });
 
+test("в классическом интерфейсе сетка нижнего меню совпадает по ширине с содержимым шапки", () => {
+  const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
+  const desktop = css.match(/@media \(min-width: 1200px\) and \(min-height: 700px\) \{([\s\S]+?)\n\}/)?.[1] || "";
+  const inset = "max(24px, calc((100vw - 1120px) / 2))";
+  assert.match(desktop, new RegExp(`\\.app-header \\{[\\s\\S]+padding-right: ${inset.replace(/[()]/g, "\\$&")};[\\s\\S]+padding-left: ${inset.replace(/[()]/g, "\\$&")};`));
+  assert.match(desktop, new RegExp(`html\\[data-interface="classic"\\] \\.bottom-nav \\{[\\s\\S]+padding-right: ${inset.replace(/[()]/g, "\\$&")};[\\s\\S]+padding-left: ${inset.replace(/[()]/g, "\\$&")};`));
+});
+
 test("портретный safe-area оболочки сохраняется только после подтверждения", () => {
   const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
   assert.match(app, /handleVisualViewportChange = debounce\(\(\) => \{ syncVisualViewport\(\); ensureFocusedEntryFieldVisible\(\); \}, 80\)/);
