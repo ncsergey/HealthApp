@@ -1,10 +1,9 @@
 {
   "name": "healthapp",
-  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
     "test": "node --test tests/core.test.mjs",
-    "check": "node --check js/app.js && node --check js/db.js && node --check js/export.js && node --check js/import.js && node --check js/interface-settings.js && node --check sw.js"
+    "check": "node --check js/app.js && node --check js/app-info.js && node --check js/db.js && node --check js/export.js && node --check js/import.js && node --check js/interface-settings.js && node --check scripts/build.mjs && node --check sw.js"
   }
 }

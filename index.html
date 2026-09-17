@@ -27,7 +27,7 @@
   <div class="app-shell">
     <div class="top-chrome-anchor">
       <header class="app-header">
-        <div class="brand"><span id="brand-icon-container" class="brand-icon-container" aria-hidden="true"><img class="brand-icon" src="./icons/icon-192.png" alt=""><span class="brand-emoji" hidden></span></span><div><p class="eyebrow">Дневник здоровья · <button id="app-version" class="app-version" type="button" disabled aria-label="Версия v168">v168</button></p><h1>MyHealth</h1></div></div>
+        <div class="brand"><span id="brand-icon-container" class="brand-icon-container" aria-hidden="true"><img class="brand-icon" src="./icons/icon-192.png" alt=""><span class="brand-emoji" hidden></span></span><div><p class="eyebrow">Дневник здоровья · <button id="app-version" class="app-version" type="button" disabled aria-label="Версия загружается">v—</button></p><h1>MyHealth</h1></div></div>
         <div class="header-actions"><button id="settings-button" class="icon-button" type="button" data-view="settings" data-settings-root aria-label="Настройки" title="Настройки"><span aria-hidden="true">⚙️</span></button></div>
       </header>
     </div>
@@ -76,7 +76,61 @@
         <button class="settings-card" type="button" data-settings-target="profile"><span class="settings-icon" aria-hidden="true">👤</span><span class="settings-main"><strong>Аккаунт</strong><small>Личные данные пользователя</small></span><span class="settings-chevron" aria-hidden="true">›</span></button>
         <button class="settings-card" type="button" data-settings-target="interface"><span class="settings-icon" aria-hidden="true">🎨</span><span class="settings-main"><strong>Интерфейс</strong><small>Смена оформления</small></span><span class="settings-chevron" aria-hidden="true">›</span></button>
         <button class="settings-card" type="button" data-settings-target="backup"><span class="settings-icon" aria-hidden="true">💾</span><span class="settings-main"><strong>Резервная копия</strong><small>Экспорт и импорт данных</small></span><span class="settings-chevron" aria-hidden="true">›</span></button>
+        <button class="settings-card" type="button" data-settings-target="about"><span class="settings-icon" aria-hidden="true">ℹ️</span><span class="settings-main"><strong>О программе</strong><small>Версия и возможности MyHealth</small></span><span class="settings-chevron" aria-hidden="true">›</span></button>
       </div>
+    </section>
+    <section id="about-view" class="view" aria-labelledby="about-heading" hidden>
+      <div class="section-heading"><div><p class="eyebrow">Информация о приложении</p><h2 id="about-heading">О программе</h2></div></div>
+      <button id="about-back" class="back-button" type="button"><span aria-hidden="true">‹</span> К настройкам</button>
+      <div class="about-brand-card"><img src="./icons/icon-192.png" alt="" aria-hidden="true"><div><strong>MyHealth</strong><small>Личный дневник здоровья</small></div></div>
+      <div class="settings-grid" aria-label="Информация о MyHealth">
+        <button class="settings-card" type="button" data-about-target="changes"><span class="settings-icon" aria-hidden="true">✨</span><span class="settings-main"><strong>Изменения</strong><small>Номер и дата сборки</small></span><span class="settings-chevron" aria-hidden="true">›</span></button>
+        <button class="settings-card" type="button" data-about-target="description"><span class="settings-icon" aria-hidden="true">📄</span><span class="settings-main"><strong>Описание</strong><small>Для чего создан MyHealth</small></span><span class="settings-chevron" aria-hidden="true">›</span></button>
+        <button class="settings-card" type="button" data-about-target="features"><span class="settings-icon" aria-hidden="true">✅</span><span class="settings-main"><strong>Список возможностей</strong><small>Что умеет приложение</small></span><span class="settings-chevron" aria-hidden="true">›</span></button>
+      </div>
+    </section>
+    <section id="changes-view" class="view" aria-labelledby="changes-heading" hidden>
+      <div class="section-heading"><div><p class="eyebrow">Текущий выпуск</p><h2 id="changes-heading">Изменения</h2></div></div>
+      <button class="about-child-back back-button" type="button"><span aria-hidden="true">‹</span> К разделу «О программе»</button>
+      <div id="changes-content" class="about-content" aria-live="polite" aria-busy="true"></div>
+    </section>
+    <section id="description-view" class="view" aria-labelledby="description-heading" hidden>
+      <div class="section-heading"><div><p class="eyebrow">MyHealth</p><h2 id="description-heading">Описание</h2></div></div>
+      <button class="about-child-back back-button" type="button"><span aria-hidden="true">‹</span> К разделу «О программе»</button>
+      <div class="about-content"><section class="about-section" aria-labelledby="about-description-section"><h3 id="about-description-section">Описание</h3>
+        <p>MyHealth — приватное веб-приложение для ведения личного дневника здоровья. Оно помогает сохранять измерения давления, пульса, глюкозы и веса, фиксировать эпизоды боли, контролировать курсы лекарств и просматривать статистику по накопленным данным.</p>
+        <p>Приложение работает полностью на устройстве пользователя: записи хранятся локально в IndexedDB и не отправляются на серверы, в аналитику или сторонние сервисы. После первого открытия MyHealth можно установить как PWA и использовать без подключения к интернету. Для переноса и восстановления данных предусмотрены экспорт и импорт резервных копий.</p>
+        <p>MyHealth предназначен для самостоятельного наблюдения за показателями. Справочные оценки и графики не являются диагнозом и не заменяют консультацию врача.</p>
+      </section></div>
+    </section>
+    <section id="features-view" class="view" aria-labelledby="features-heading" hidden>
+      <div class="section-heading"><div><p class="eyebrow">MyHealth</p><h2 id="features-heading">Возможности</h2></div></div>
+      <button class="about-child-back back-button" type="button"><span aria-hidden="true">‹</span> К разделу «О программе»</button>
+      <div class="about-content"><section class="about-section" aria-labelledby="about-features-section"><h3 id="about-features-section">Возможности</h3><ul>
+        <li>Единый дневник давления, пульса, глюкозы, веса и эпизодов боли.</li>
+        <li>Создание, редактирование и удаление записей с датой, временем и комментарием.</li>
+        <li>Фильтрация дневника по типу записи и постраничная загрузка истории.</li>
+        <li>Учёт продолжающихся и завершённых эпизодов боли с выбором части тела, времени начала и окончания.</li>
+        <li>Фиксация постоянной или переменной интенсивности боли по шкале от 1 до 10.</li>
+        <li>Добавление принятого лекарства, дозировки, единицы измерения и времени приёма к эпизоду боли.</li>
+        <li>Статистика за 7, 30 и 90 дней, за всё время или за выбранный период.</li>
+        <li>Обзор показателей, справочная оценка значений и адаптивные графики без внешних библиотек.</li>
+        <li>Сравнение давления во время эпизодов боли и вне их.</li>
+        <li>Курсы лекарств с периодом лечения, дозировкой, расписанием и привязкой к приёму пищи.</li>
+        <li>План приёмов на сегодня, отметки о выполнении, история и статистика соблюдения курса.</li>
+        <li>Настраиваемые справочники частей тела и лекарств.</li>
+        <li>Личный профиль с датой рождения, полом и ростом, а также расчёт ИМТ по последней записи веса.</li>
+        <li>Классический и современный интерфейсы с эффектом Liquid Glass.</li>
+        <li>Полный, облегчённый и отключённый режимы визуальных эффектов.</li>
+        <li>Настройка прозрачности и интенсивности размытия отдельными цветными ползунками.</li>
+        <li>Автоматическая, светлая и тёмная темы с мгновенным переключением.</li>
+        <li>Экспорт данных в CSV и полную резервную копию JSON.</li>
+        <li>Импорт JSON с добавлением записей к существующим данным или полной заменой локальной базы.</li>
+        <li>Напоминание о создании резервной копии после изменения данных.</li>
+        <li>Адаптивная вёрстка для телефонов, планшетов и компьютеров с поддержкой Safe Area и крупных сенсорных элементов.</li>
+        <li>Установка на главный экран и автономная работа благодаря Service Worker.</li>
+        <li>Полностью локальное хранение без backend, рекламы, телеметрии и сторонних API.</li>
+      </ul></section></div>
     </section>
     <section id="interface-view" class="view" aria-labelledby="interface-heading" hidden>
       <div class="section-heading"><div><p class="eyebrow">Внешний вид приложения</p><h2 id="interface-heading">Интерфейс</h2></div></div>

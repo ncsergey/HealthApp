@@ -1,0 +1,7 @@
+version: "3"
+
+tasks:
+  build:
+    desc: Проверить приложение и обновить номер и дату успешной сборки
+    cmds:
+      - node scripts/build.mjs

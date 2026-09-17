@@ -9,6 +9,7 @@ import { createElement as el, debounce, finiteInteger, makeId } from "./utils.js
 import { DEFAULT_BODY_PARTS, UNIT_BY_ID, directoryItemById, formatMedicationAmount, formatMedicationDose, hasOngoingPainForBodyPart, normalizedNameKey, parseMedicationAmount, validateDirectoryName } from "./pain.js";
 import { DAY_PARTS, FOOD_RELATIONS, buildDaySchedule, formatMedicationExpirationRemaining, formatMedicationNameWithExpiration, isCourseCompletedOn, medicationExpirationStatus, validateMedicationCourse } from "./medications.js";
 import { DEFAULT_GLASS_BLUR_INTENSITY, DEFAULT_GLASS_EFFECTS, DEFAULT_GLASS_TRANSPARENCY, DEFAULT_THEME, MAX_GLASS_BLUR_INTENSITY, MAX_GLASS_TRANSPARENCY, MIN_GLASS_BLUR_INTENSITY, MIN_GLASS_TRANSPARENCY, applyGlassBlurIntensity, applyGlassTransparency, applyTheme, applyUiSettings, detectInitialInterface, initializeTheme, initializeUiSettings, saveTheme, saveUiSettings } from "./interface-settings.js";
+import { createAppInfoLoader, createChangeLoader } from "./app-info.js";
 
 const PAGE_SIZE = 60;
 const BIRTHDAY_EMOJIS = Object.freeze(["🎉", "🥳", "🎂", "🎊", "🎈", "🎁", "🍰"]);
@@ -23,7 +24,8 @@ const STORE_BY_KIND = Object.freeze({ pressure: STORES.pressure, pulse: STORES.p
 const DIRECTORY_META = Object.freeze({ bodyParts: { title: "Части тела", icon: "🧍" }, medications: { title: "Препараты", icon: "💊" } });
 const APP_NAVIGATION_KEY = "myhealthNavigation";
 const ROOT_VIEWS = new Set(["diary", "stats", "medications", "directories"]);
-const SETTINGS_CHILD_VIEWS = new Set(["profile", "interface", "backup"]);
+const SETTINGS_CHILD_VIEWS = new Set(["profile", "interface", "backup", "about"]);
+const ABOUT_CHILD_VIEWS = new Set(["changes", "description", "features"]);
 let backupPendingFallback = false;
 let backupReminderDismissedFallback = false;
 let modalScrollY = 0;
@@ -34,6 +36,8 @@ let confirmedPortraitSafeTop = null;
 let portraitSafeTopCandidate = null;
 let portraitSafeTopCandidateCount = 0;
 let portraitSafeTopTimers = [];
+const loadAppInfoOnce = createAppInfoLoader();
+const loadChangesOnce = createChangeLoader();
 
 const initialUiSettings = (() => {
   try { return initializeUiSettings(); }
@@ -50,16 +54,63 @@ const state = {
   data: { profile: null, pressureMeasurements: [], pulseMeasurements: [], painEpisodes: [], glucoseMeasurements: [], weightMeasurements: [], temperatureMeasurements: [], stepsMeasurements: [], bodyParts: [], medications: [], medicationCourses: [], medicationIntakes: [] },
   diaryFilter: "all", diaryLimit: PAGE_SIZE, statsMetric: "overview", pendingImport: null,
   pressureWarningAccepted: false, chartObservers: [], glucoseContext: "all", glucoseFormat: "all", painBodyPart: "all", directoryContext: null, activeDirectory: null,
-  medicationTab: "today", medicationDate: getMoscowFields().date, activeView: "diary", uiSettings: initialUiSettings, theme: initialTheme
+  medicationTab: "today", medicationDate: getMoscowFields().date, activeView: "diary", uiSettings: initialUiSettings, theme: initialTheme,
+  appInfo: null, appInfoUnavailable: false, changes: null, changesUnavailable: false
 };
 
 const elements = {
-  diaryView: document.querySelector("#diary-view"), statsView: document.querySelector("#stats-view"), settingsView: document.querySelector("#settings-view"), profileView: document.querySelector("#profile-view"), interfaceView: document.querySelector("#interface-view"), backupView: document.querySelector("#backup-view"), directoriesView: document.querySelector("#directories-view"), medicationsView: document.querySelector("#medications-view"),
+  diaryView: document.querySelector("#diary-view"), statsView: document.querySelector("#stats-view"), settingsView: document.querySelector("#settings-view"), profileView: document.querySelector("#profile-view"), interfaceView: document.querySelector("#interface-view"), backupView: document.querySelector("#backup-view"), aboutView: document.querySelector("#about-view"), changesView: document.querySelector("#changes-view"), descriptionView: document.querySelector("#description-view"), featuresView: document.querySelector("#features-view"), directoriesView: document.querySelector("#directories-view"), medicationsView: document.querySelector("#medications-view"),
   diaryList: document.querySelector("#diary-list"), diaryFilterSelect: document.querySelector("#diary-filter-select"), loadMore: document.querySelector("#load-more-button"),
   statsContent: document.querySelector("#stats-content"), statsSubfilters: document.querySelector("#stats-subfilters"), statsBack: document.querySelector("#stats-back"),
   statsPeriod: document.querySelector("#stats-period"), customPeriod: document.querySelector("#custom-period"), periodStart: document.querySelector("#period-start"), periodEnd: document.querySelector("#period-end"),
-  profileContent: document.querySelector("#profile-content"), directoriesContent: document.querySelector("#directories-content"), directoriesHeading: document.querySelector("#directories-heading"), directoriesBack: document.querySelector("#directories-back"), directoryAdd: document.querySelector("#directory-add-button"), medicationsContent: document.querySelector("#medications-content"), medicationCourseAdd: document.querySelector("#medication-course-add"), offlineBanner: document.querySelector("#offline-banner"), storageWarning: document.querySelector("#storage-warning"), toast: document.querySelector("#toast")
+  profileContent: document.querySelector("#profile-content"), changesContent: document.querySelector("#changes-content"), directoriesContent: document.querySelector("#directories-content"), directoriesHeading: document.querySelector("#directories-heading"), directoriesBack: document.querySelector("#directories-back"), directoryAdd: document.querySelector("#directory-add-button"), medicationsContent: document.querySelector("#medications-content"), medicationCourseAdd: document.querySelector("#medication-course-add"), offlineBanner: document.querySelector("#offline-banner"), storageWarning: document.querySelector("#storage-warning"), toast: document.querySelector("#toast")
 };
+
+function aboutSection(title, children) {
+  return el("section", { className: "about-section", attrs: { "aria-labelledby": `about-${title.toLowerCase().replaceAll(" ", "-")}` } }, [
+    el("h3", { text: title, attrs: { id: `about-${title.toLowerCase().replaceAll(" ", "-")}` } }), ...children
+  ]);
+}
+
+function setAboutContentState(container, busy) {
+  container.setAttribute("aria-busy", String(busy));
+}
+
+function renderAppInfo() {
+  const info = state.appInfo;
+  if (info) {
+    const versionButton = document.querySelector("#app-version");
+    versionButton.textContent = `v${info.version}`;
+    versionButton.setAttribute("aria-label", versionButton.classList.contains("update-ready") ? `Версия v${info.version}: доступна новая версия, нажмите для обновления` : `Версия v${info.version}`);
+
+    elements.changesContent.replaceChildren(
+      aboutSection("Версия", [el("p", { text: info.version })]),
+      aboutSection("Дата и время сборки", [el("p", { text: info.buildDate })]),
+      state.changes
+        ? aboutSection("Изменения", [el("ol", {}, state.changes.map((item) => el("li", { text: item })))])
+        : state.changesUnavailable
+          ? aboutSection("Изменения", [el("p", { className: "muted", text: "Информация об изменениях недоступна" })])
+          : aboutSection("Изменения", [el("p", { className: "muted", text: "Загрузка изменений…" })])
+    );
+  } else if (state.appInfoUnavailable) {
+    elements.changesContent.replaceChildren(emptyState("Информация о версии недоступна", "Попробуйте открыть раздел позже.", "ℹ️"));
+  } else {
+    elements.changesContent.replaceChildren(el("p", { className: "about-loading muted", text: "Загрузка информации…" }));
+  }
+  setAboutContentState(elements.changesContent, (!info && !state.appInfoUnavailable) || (!state.changes && !state.changesUnavailable));
+}
+
+function ensureAppInfo() {
+  return loadAppInfoOnce()
+    .then((info) => { state.appInfo = info; renderAppInfo(); return info; })
+    .catch(() => { state.appInfoUnavailable = true; renderAppInfo(); return null; });
+}
+
+function ensureChanges() {
+  return loadChangesOnce()
+    .then((changes) => { state.changes = changes; renderAppInfo(); return changes; })
+    .catch(() => { state.changesUnavailable = true; renderAppInfo(); return null; });
+}
 
 function showToast(message) {
   elements.toast.textContent = message;
@@ -1224,16 +1275,17 @@ async function handleMedicationAction(event) {
 }
 
 function switchView(view) {
-  const views = { diary: elements.diaryView, stats: elements.statsView, settings: elements.settingsView, profile: elements.profileView, interface: elements.interfaceView, backup: elements.backupView, directories: elements.directoriesView, medications: elements.medicationsView };
+  const views = { diary: elements.diaryView, stats: elements.statsView, settings: elements.settingsView, profile: elements.profileView, interface: elements.interfaceView, backup: elements.backupView, about: elements.aboutView, changes: elements.changesView, description: elements.descriptionView, features: elements.featuresView, directories: elements.directoriesView, medications: elements.medicationsView };
   if (!views[view]) return;
   state.activeView = view;
   for (const [name, section] of Object.entries(views)) section.hidden = name !== view;
-  const settingsActive = ["settings", "profile", "interface", "backup"].includes(view);
+  const settingsActive = view === "settings" || SETTINGS_CHILD_VIEWS.has(view) || ABOUT_CHILD_VIEWS.has(view);
   document.querySelectorAll("[data-view]").forEach((button) => { const active = button.dataset.view === view || (button.hasAttribute("data-settings-root") && settingsActive); button.classList.toggle("active", active); if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current"); });
   if (view === "stats") { state.statsMetric = "overview"; renderStatistics(); }
   if (view === "profile") renderProfile();
   if (view === "interface") renderInterfaceSettings();
   if (view === "backup") document.querySelector("#data-error").textContent = "";
+  if (view === "about" || ABOUT_CHILD_VIEWS.has(view)) { ensureAppInfo(); ensureChanges(); }
   if (view === "directories") { state.activeDirectory = null; renderDirectories(); }
   if (view === "medications") { state.medicationTab = "today"; state.medicationDate = getMoscowFields().date; renderMedications(); }
   scrollPageToTop();
@@ -1252,6 +1304,7 @@ function navigateRootView(view) {
 function navigateToSettings() {
   if (state.activeView === "settings") return;
   if (SETTINGS_CHILD_VIEWS.has(state.activeView)) { navigateBack(); return; }
+  if (ABOUT_CHILD_VIEWS.has(state.activeView)) { history.go(-2); return; }
   switchView("settings");
   pushNavigationEntry();
 }
@@ -1262,13 +1315,19 @@ function navigateToSettingsChild(view) {
   pushNavigationEntry();
 }
 
+function navigateToAboutChild(view) {
+  if (!ABOUT_CHILD_VIEWS.has(view) || state.activeView === view) return;
+  switchView(view);
+  pushNavigationEntry();
+}
+
 function navigateBack() {
   if ((navigationState()?.depth || 0) > 0) history.back();
 }
 
 function applyNavigationState(next) {
   if (!next || next.version !== 1) return;
-  const validView = ROOT_VIEWS.has(next.view) || next.view === "settings" || SETTINGS_CHILD_VIEWS.has(next.view);
+  const validView = ROOT_VIEWS.has(next.view) || next.view === "settings" || SETTINGS_CHILD_VIEWS.has(next.view) || ABOUT_CHILD_VIEWS.has(next.view);
   if (!validView) return;
   applyingNavigationState = true;
   try {
@@ -1393,7 +1452,8 @@ function bindEvents() {
   document.querySelectorAll("dialog.sheet").forEach((dialog) => dialog.addEventListener("click", (event) => { if (event.target === dialog) closeDialog(dialog); }));
   document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click", () => { if (button.dataset.view === "settings") navigateToSettings(); else navigateRootView(button.dataset.view); }));
   document.querySelectorAll("[data-settings-target]").forEach((button) => button.addEventListener("click", () => navigateToSettingsChild(button.dataset.settingsTarget)));
-  document.querySelector("#profile-back").addEventListener("click", navigateBack); document.querySelector("#interface-back").addEventListener("click", navigateBack); document.querySelector("#backup-back").addEventListener("click", navigateBack);
+  document.querySelectorAll("[data-about-target]").forEach((button) => button.addEventListener("click", () => navigateToAboutChild(button.dataset.aboutTarget)));
+  document.querySelector("#profile-back").addEventListener("click", navigateBack); document.querySelector("#interface-back").addEventListener("click", navigateBack); document.querySelector("#backup-back").addEventListener("click", navigateBack); document.querySelector("#about-back").addEventListener("click", navigateBack); document.querySelectorAll(".about-child-back").forEach((button) => button.addEventListener("click", navigateBack));
   document.querySelectorAll("[data-theme-choice]").forEach((button) => button.addEventListener("click", () => { try { persistTheme(button.dataset.themeChoice); showToast("Тема изменена"); } catch (error) { showToast(error.message); } }));
   document.querySelectorAll("[data-interface-choice]").forEach((button) => button.addEventListener("click", () => { try { persistUiSettings({ ...state.uiSettings, interface: button.dataset.interfaceChoice }); showToast("Оформление изменено"); } catch (error) { showToast(error.message); } }));
   document.querySelectorAll("[data-glass-effects-choice]").forEach((button) => button.addEventListener("click", () => { try { persistUiSettings({ ...state.uiSettings, glassEffects: button.dataset.glassEffectsChoice }); showToast("Эффекты Liquid Glass изменены"); } catch (error) { showToast(error.message); } }));
@@ -1435,7 +1495,7 @@ function bindEvents() {
 }
 
 async function initialize() {
-  renderInterfaceSettings(); initializeNavigation(); bindEvents(); updateOnlineStatus(); registerServiceWorker();
+  renderInterfaceSettings(); renderAppInfo(); ensureAppInfo(); ensureChanges(); initializeNavigation(); bindEvents(); updateOnlineStatus(); registerServiceWorker();
   try { await openDatabase(); await refreshData(); updateBirthdayBrand(); requestPersistentStorage(); showBackupPrompt(); } catch (error) { elements.diaryList.replaceChildren(emptyState("Не удалось открыть локальные данные", `${error.message} Закройте другие вкладки и попробуйте снова.`, "⚠️")); document.querySelector("#add-button").disabled = true; }
 }
 

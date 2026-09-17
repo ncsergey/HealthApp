@@ -294,6 +294,19 @@ dialog.form-sheet { overflow-y: auto; }
 .settings-main strong { font-size: 16px; }
 .settings-main small { color: var(--muted); line-height: 1.35; }
 .settings-chevron { color: var(--muted); font-size: 32px; line-height: 1; }
+.about-brand-card { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; padding: 16px; border: 1px solid var(--line); border-radius: 17px; background: var(--surface); box-shadow: 0 4px 18px rgba(20, 35, 31, .04); }
+.about-brand-card img { width: 56px; height: 56px; border-radius: 18px; box-shadow: 0 6px 16px rgba(22, 123, 104, .2); }
+.about-brand-card div { display: grid; gap: 4px; }
+.about-brand-card strong { font-size: 21px; letter-spacing: -.025em; }
+.about-brand-card small { color: var(--muted); font-size: 13px; }
+.about-content { display: grid; gap: 12px; }
+.about-section { padding: 17px; border: 1px solid var(--line); border-radius: 17px; background: var(--surface); box-shadow: 0 4px 18px rgba(20, 35, 31, .04); }
+.about-section h3 { margin-bottom: 10px; }
+.about-section p, .about-section time { display: block; margin: 0; font-size: 15px; line-height: 1.6; }
+.about-section p + p { margin-top: 12px; }
+.about-section :is(ul, ol) { display: grid; gap: 9px; margin: 0; padding-left: 22px; }
+.about-section li { padding-left: 2px; line-height: 1.5; }
+.about-loading { margin: 0; padding: 18px; border: 1px solid var(--line); border-radius: 17px; background: var(--surface); }
 .import-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
 .import-summary div { padding: 14px; border-radius: 14px; background: var(--surface-2); }
 .import-summary strong { display: block; font-size: 25px; }
@@ -948,6 +961,9 @@ html[data-interface="modern"] .interface-option,
 html[data-interface="modern"] .theme-settings-card,
 html[data-interface="modern"] .glass-settings-card,
 html[data-interface="modern"] .glass-control-card,
+html[data-interface="modern"] .about-brand-card,
+html[data-interface="modern"] .about-section,
+html[data-interface="modern"] .about-loading,
 html[data-interface="modern"] .list-action,
 html[data-interface="modern"] .choice-card {
   border-color: rgba(255,255,255,.65);
@@ -966,7 +982,7 @@ html[data-interface="modern"] .day-part-card {
 }
 html[data-interface="modern"] :is(.entry-card, .course-card) { box-shadow: var(--record-card-shadow); }
 html[data-interface="modern"] :is(.overview-card, .settings-card, .directory-choice) { box-shadow: var(--card-shadow); }
-html[data-interface="modern"] :is(.profile-item, .stat-card, .chart-card, .directory-list, .theme-settings-card, .glass-settings-card, .glass-control-card) { box-shadow: var(--info-card-shadow); }
+html[data-interface="modern"] :is(.profile-item, .stat-card, .chart-card, .directory-list, .theme-settings-card, .glass-settings-card, .glass-control-card, .about-brand-card, .about-section, .about-loading) { box-shadow: var(--info-card-shadow); }
 html[data-interface="modern"] .privacy-card,
 html[data-interface="modern"] .empty-state,
 html[data-interface="modern"] .medical-note,

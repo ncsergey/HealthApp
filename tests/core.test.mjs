@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import { isFuture, moscowDateTimeInputToIso, moscowInputToIso } from "../js/datetime.js";
@@ -10,6 +12,8 @@ import { filterDataForPeriod, glucoseStats, headacheStats, overviewStats, pressu
 import { buildDaySchedule, dayPartForTime, formatMedicationExpirationRemaining, formatMedicationNameWithExpiration, isCourseCompletedOn, medicationExpirationStatus, medicationStatistics, normalizeSchedule, validateMedicationCourse } from "../js/medications.js";
 import { createBackupPayload } from "../js/export.js";
 import { DEFAULT_GLASS_BLUR_INTENSITY, DEFAULT_GLASS_TRANSPARENCY, DEFAULT_THEME, UI_SETTINGS_KEY, UI_THEME_KEY, applyGlassBlurIntensity, applyGlassTransparency, applyTheme, applyUiSettings, initializeTheme, initializeUiSettings, readTheme, readUiSettings, saveTheme, saveUiSettings } from "../js/interface-settings.js";
+import { createAppInfoLoader, createChangeLoader, parseAppInfo, parseChangeMarkdown } from "../js/app-info.js";
+import { DEFAULT_CHANGE_MARKDOWN, buildApplication, formatBuildDate, incrementPatchVersion, updateServiceWorkerCacheName } from "../scripts/build.mjs";
 
 function memoryStorage() {
   const values = new Map();
@@ -956,4 +960,115 @@ test("backup 1–9 сохраняют текущую интенсивность,
   assert.deepEqual({ interface: "modern", glassTransparency: 45, glassEffects: "reduced", glassBlurIntensity: 57, ...parsed9.uiSettings }, { interface: "modern", glassTransparency: 60, glassEffects: "none", glassBlurIntensity: 57 });
   const storageWithoutCurrentIntensity = memoryStorage();
   assert.deepEqual(saveUiSettings(parsed9.uiSettings, storageWithoutCurrentIntensity), { interface: "modern", glassTransparency: 60, glassEffects: "none", glassBlurIntensity: 100 });
+});
+
+test("метаданные приложения проверяются и дата сборки форматируется безопасно", () => {
+  const valid = { version: "1.2.3", buildDate: "17.09.26 09:27", change: 1 };
+  assert.deepEqual({ ...parseAppInfo(valid) }, valid);
+  for (const damaged of [
+    null,
+    { ...valid, version: "v1" },
+    { ...valid, buildDate: "не дата" },
+    { ...valid, buildDate: "17.09.2026 09:27" },
+    { ...valid, buildDate: "32.13.26 25:61" },
+    { ...valid, change: 2 },
+    { ...valid, changes: [] }
+  ]) assert.throws(() => parseAppInfo(damaged), /Некорректн/);
+});
+
+test("загрузчик метаданных выполняет только один запрос и проверяет ответ", async () => {
+  const payload = { version: "1.0.0", buildDate: "17.09.26 09:27", change: 0 };
+  let requests = 0;
+  const load = createAppInfoLoader(async (url) => { requests += 1; assert.equal(url, "./app-info.json"); return { ok: true, json: async () => payload }; });
+  const [first, second] = await Promise.all([load(), load()]);
+  assert.equal(requests, 1);
+  assert.equal(first, second);
+  await assert.rejects(() => createAppInfoLoader(async () => ({ ok: false }))(), /Не удалось загрузить/);
+  await assert.rejects(() => createAppInfoLoader(async () => ({ ok: true, json: async () => ({ ...payload, version: "1" }) }))(), /версия/);
+});
+
+test("CHANGE.md разбирается безопасно и загружается только один раз", async () => {
+  assert.deepEqual(parseChangeMarkdown(DEFAULT_CHANGE_MARKDOWN), ["Исправления ошибок.", "Оптимизиация приложения."]);
+  assert.throws(() => parseChangeMarkdown("## Другое\n1. Текст"), /отсутствует раздел/);
+  assert.throws(() => parseChangeMarkdown("## Изменения\nНет списка"), /отсутствует список/);
+  let requests = 0;
+  const load = createChangeLoader(async (url) => { requests += 1; assert.equal(url, "./CHANGE.md"); return { ok: true, text: async () => DEFAULT_CHANGE_MARKDOWN }; });
+  const [first, second] = await Promise.all([load(), load()]);
+  assert.equal(requests, 1);
+  assert.equal(first, second);
+});
+
+test("app-info содержит версию, дату и режим изменений, а package.json не дублирует версию", () => {
+  const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  const raw = JSON.parse(readFileSync(new URL("../app-info.json", import.meta.url), "utf8"));
+  assert.deepEqual(Object.keys(raw), ["version", "buildDate", "change"]);
+  parseAppInfo(raw);
+  assert.equal(Object.hasOwn(packageJson, "version"), false);
+});
+
+test("сборка увеличивает Z, форматирует локальную дату и пишет метаданные только после проверок", () => {
+  assert.equal(incrementPatchVersion("1.0.1"), "1.0.2");
+  assert.equal(incrementPatchVersion("12.4.99"), "12.4.100");
+  assert.throws(() => incrementPatchVersion("1.0"), /X\.Y\.Z/);
+  assert.equal(formatBuildDate(new Date(2026, 8, 17, 9, 27)), "17.09.26 09:27");
+  const build = readFileSync(new URL("../scripts/build.mjs", import.meta.url), "utf8");
+  const taskfile = readFileSync(new URL("../Taskfile.yml", import.meta.url), "utf8");
+  assert.match(build, /await verifyBuild\(root\);[\s\S]+writeFile\(appInfoPath/);
+  assert.match(build, /catch \(error\)[\s\S]+writeFile\(appInfoPath, originalAppInfo/);
+  assert.match(taskfile, /build:[\s\S]+node scripts\/build\.mjs/);
+});
+
+test("неудачная сборка не изменяет версию, дату и ревизию кеша", async (context) => {
+  const root = mkdtempSync(join(tmpdir(), "myhealth-build-"));
+  context.after(() => rmSync(root, { recursive: true, force: true }));
+  const appInfo = '{\n  "version": "1.0.1",\n  "buildDate": "17.09.26 09:25",\n  "change": 1\n}\n';
+  const change = "## Изменения\n1. Ручной текст.\n";
+  const serviceWorker = 'const CACHE_NAME = "health-app-static-current";\n';
+  writeFileSync(join(root, "app-info.json"), appInfo);
+  writeFileSync(join(root, "CHANGE.md"), change);
+  writeFileSync(join(root, "sw.js"), serviceWorker);
+  await assert.rejects(() => buildApplication(root, new Date(2026, 8, 17, 9, 27), async () => { throw new Error("Проверка не пройдена"); }), /Проверка не пройдена/);
+  assert.equal(readFileSync(join(root, "app-info.json"), "utf8"), appInfo);
+  assert.equal(readFileSync(join(root, "CHANGE.md"), "utf8"), change);
+  assert.equal(readFileSync(join(root, "sw.js"), "utf8"), serviceWorker);
+});
+
+test("change управляет автоматическим обновлением CHANGE.md", async (context) => {
+  async function runBuild(changeFlag, contents) {
+    const root = mkdtempSync(join(tmpdir(), "myhealth-change-"));
+    context.after(() => rmSync(root, { recursive: true, force: true }));
+    writeFileSync(join(root, "app-info.json"), `${JSON.stringify({ version: "1.0.1", buildDate: "17.09.26 09:25", change: changeFlag }, null, 2)}\n`);
+    writeFileSync(join(root, "CHANGE.md"), contents);
+    writeFileSync(join(root, "sw.js"), 'const CACHE_NAME = "health-app-static-current";\n');
+    await buildApplication(root, new Date(2026, 8, 17, 9, 27), async () => {});
+    return { info: JSON.parse(readFileSync(join(root, "app-info.json"), "utf8")), change: readFileSync(join(root, "CHANGE.md"), "utf8") };
+  }
+  const automatic = await runBuild(1, "## Изменения\n1. Старый текст.\n");
+  assert.deepEqual(automatic.info, { version: "1.0.2", buildDate: "17.09.26 09:27", change: 1 });
+  assert.equal(automatic.change, DEFAULT_CHANGE_MARKDOWN);
+  const manualText = "## Изменения\n1. Заполнено вручную.\n";
+  const manual = await runBuild(0, manualText);
+  assert.deepEqual(manual.info, { version: "1.0.2", buildDate: "17.09.26 09:27", change: 0 });
+  assert.equal(manual.change, manualText);
+});
+
+test("раздел «О программе» встроен в навигацию и app shell", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
+  const serviceWorker = readFileSync(new URL("../sw.js", import.meta.url), "utf8");
+  for (const view of ["about", "changes", "description", "features"]) assert.match(html, new RegExp(`id="${view}-view"`));
+  assert.match(html, /data-settings-target="about"/);
+  assert.equal((html.match(/data-about-target=/g) || []).length, 3);
+  assert.match(app, /const ABOUT_CHILD_VIEWS = new Set\(\["changes", "description", "features"\]\)/);
+  assert.match(app, /document\.querySelectorAll\("\.about-child-back"\)/);
+  assert.match(serviceWorker, /"\.\/app-info\.json"/);
+  assert.match(serviceWorker, /"\.\/CHANGE\.md"/);
+  assert.match(serviceWorker, /"\.\/js\/app-info\.js"/);
+  assert.match(updateServiceWorkerCacheName(serviceWorker, "test123"), /health-app-static-test123/);
+});
+
+test("метаданные приложения не попадают в пользовательскую резервную копию", () => {
+  const payload = createBackupPayload(emptyBackupData, { interface: "classic", glassTransparency: 25, glassEffects: "full", glassBlurIntensity: 100 }, "2026-09-17T07:30:00.000Z");
+  for (const key of ["appInfo", "description", "features", "changes", "change", "buildDate", "buildDateTime"]) assert.equal(Object.hasOwn(payload, key), false);
+  assert.equal(payload.version, 11);
 });
