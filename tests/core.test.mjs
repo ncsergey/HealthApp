@@ -893,12 +893,20 @@ test("вложенные экраны участвуют в системной �
   assert.match(app, /function pushNavigationEntry\(\) \{ history\.pushState/);
   assert.match(app, /window\.addEventListener\("popstate", handleNavigationPop\)/);
   assert.match(app, /function openDirectory\(kind\)[\s\S]+pushNavigationEntry\(\)/);
-  assert.match(app, /state\.statsMetric = card\.dataset\.metric; renderStatistics\(\); scrollPageToTop\(\); pushNavigationEntry\(\)/);
+  assert.match(app, /saveCurrentNavigationScroll\(\); state\.statsMetric = card\.dataset\.metric; renderStatistics\(\); scrollPageToTop\(\); pushNavigationEntry\(\)/);
   assert.match(app, /elements\.directoriesBack\.addEventListener\("click", navigateBack\)/);
   assert.match(app, /elements\.statsBack\.addEventListener\("click", navigateBack\)/);
   assert.match(app, /dialog\.addEventListener\("cancel", \(event\) => event\.preventDefault\(\)\)/);
   assert.match(app, /document\.querySelector\("dialog\[open\]"\) && modalNavigationState[\s\S]+history\.pushState/);
   assert.doesNotMatch(app, /dialogStack|dialogs: \[/);
+});
+
+test("возврат на предыдущий экран восстанавливает его прокрутку", () => {
+  const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
+  assert.match(app, /function navigationSnapshot\([\s\S]+scrollTop = currentPageScrollTop\(\)[\s\S]+scrollTop/);
+  assert.match(app, /function saveCurrentNavigationScroll\(\)[\s\S]+history\.replaceState\(navigationSnapshot\(current\.depth, currentPageScrollTop\(\)\)/);
+  assert.match(app, /function applyNavigationState\(next\)[\s\S]+switchView\(next\.view, \{ scrollToTop: false \}\)[\s\S]+restorePageScroll\(next\.scrollTop\)/);
+  assert.match(app, /history\.scrollRestoration = "manual"/);
 });
 
 test("ползунки боли используют общий компонент и насыщенный градиент", () => {

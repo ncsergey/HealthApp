@@ -1,4 +1,4 @@
-const CACHE_NAME = "health-app-static-30e843e099fa";
+const CACHE_NAME = "health-app-static-88a5d8faa90b";
 const CACHE_PREFIX = "health-app-static-";
 const APP_SHELL = [
   "./",

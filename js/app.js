@@ -329,6 +329,22 @@ function scrollPageToTop(behavior = "smooth") {
   else scroller?.scrollTo({ top: 0, behavior });
 }
 
+function currentPageScrollTop() {
+  const scroller = pageScrollContainer();
+  return scroller === document.scrollingElement ? window.scrollY || scroller?.scrollTop || 0 : scroller?.scrollTop || 0;
+}
+
+function restorePageScroll(top) {
+  const scrollTop = Number.isFinite(top) && top >= 0 ? top : 0;
+  const restore = () => {
+    const scroller = pageScrollContainer();
+    if (scroller === document.scrollingElement) window.scrollTo({ top: scrollTop, behavior: "auto" });
+    else scroller?.scrollTo({ top: scrollTop, behavior: "auto" });
+  };
+  restore();
+  requestAnimationFrame(restore);
+}
+
 function syncModalState() {
   const hasOpenDialog = Boolean(document.querySelector("dialog[open]"));
   const root = document.documentElement;
@@ -362,23 +378,29 @@ function ensureFocusedEntryFieldVisible() {
 
 function navigationState() {
   const value = history.state?.[APP_NAVIGATION_KEY];
-  return value?.version === 1 && Number.isInteger(value.depth) && value.depth >= 0 ? value : null;
+  if (value?.version !== 1 || !Number.isInteger(value.depth) || value.depth < 0) return null;
+  return { ...value, scrollTop: Number.isFinite(value.scrollTop) && value.scrollTop >= 0 ? value.scrollTop : 0 };
 }
 
-function navigationSnapshot(depth = navigationState()?.depth || 0) {
+function navigationSnapshot(depth = navigationState()?.depth || 0, scrollTop = currentPageScrollTop()) {
   return {
     [APP_NAVIGATION_KEY]: {
       version: 1,
       depth,
       view: state.activeView,
       directory: state.activeView === "directories" ? state.activeDirectory : null,
-      statsMetric: state.activeView === "stats" ? state.statsMetric : "overview"
+      statsMetric: state.activeView === "stats" ? state.statsMetric : "overview",
+      scrollTop
     }
   };
 }
 
 function replaceNavigationEntry(depth = navigationState()?.depth || 0) { history.replaceState(navigationSnapshot(depth), ""); }
-function pushNavigationEntry() { history.pushState(navigationSnapshot((navigationState()?.depth || 0) + 1), ""); }
+function saveCurrentNavigationScroll() {
+  const current = navigationState();
+  if (current) history.replaceState(navigationSnapshot(current.depth, currentPageScrollTop()), "");
+}
+function pushNavigationEntry() { history.pushState(navigationSnapshot((navigationState()?.depth || 0) + 1, 0), ""); }
 
 function hideDialog(dialog) {
   if (!dialog?.open) return;
@@ -951,6 +973,7 @@ function directoryItems(kind) {
 
 function openDirectory(kind) {
   if (!DIRECTORY_META[kind] || state.activeDirectory === kind) return;
+  if (!applyingNavigationState) saveCurrentNavigationScroll();
   state.activeDirectory = kind; renderDirectories(); scrollPageToTop();
   if (!applyingNavigationState) pushNavigationEntry();
 }
@@ -1274,7 +1297,7 @@ async function handleMedicationAction(event) {
   if (button.dataset.medicationAction === "archive-course" && course && await confirmAction({ title: "Завершить курс?", message: "Курс будет перенесён в историю.", confirmLabel: "Завершить", confirmClass: "primary-button" })) { const today = getMoscowFields().date; const endDate = course.startDate > today ? null : (!course.endDate || course.endDate > today ? today : course.endDate); await saveRecord(STORES.medicationCourses, { ...course, endDate, archived: true, editedAt: new Date().toISOString() }); await refreshData(); handleSuccessfulDataChange("Курс завершён"); }
 }
 
-function switchView(view) {
+function switchView(view, { scrollToTop = true } = {}) {
   const views = { diary: elements.diaryView, stats: elements.statsView, settings: elements.settingsView, profile: elements.profileView, interface: elements.interfaceView, backup: elements.backupView, about: elements.aboutView, changes: elements.changesView, description: elements.descriptionView, features: elements.featuresView, directories: elements.directoriesView, medications: elements.medicationsView };
   if (!views[view]) return;
   state.activeView = view;
@@ -1288,12 +1311,13 @@ function switchView(view) {
   if (view === "about" || ABOUT_CHILD_VIEWS.has(view)) { ensureAppInfo(); ensureChanges(); }
   if (view === "directories") { state.activeDirectory = null; renderDirectories(); }
   if (view === "medications") { state.medicationTab = "today"; state.medicationDate = getMoscowFields().date; renderMedications(); }
-  scrollPageToTop();
+  if (scrollToTop) scrollPageToTop();
 }
 
 function navigateRootView(view) {
   if (!ROOT_VIEWS.has(view)) return;
   const depth = navigationState()?.depth || 0;
+  saveCurrentNavigationScroll();
   switchView(view);
   if (depth > 0) {
     pendingRootView = view;
@@ -1304,25 +1328,28 @@ function navigateRootView(view) {
 function navigateToSettings() {
   if (state.activeView === "settings") return;
   if (SETTINGS_CHILD_VIEWS.has(state.activeView)) { navigateBack(); return; }
-  if (ABOUT_CHILD_VIEWS.has(state.activeView)) { history.go(-2); return; }
+  if (ABOUT_CHILD_VIEWS.has(state.activeView)) { saveCurrentNavigationScroll(); history.go(-2); return; }
+  saveCurrentNavigationScroll();
   switchView("settings");
   pushNavigationEntry();
 }
 
 function navigateToSettingsChild(view) {
   if (!SETTINGS_CHILD_VIEWS.has(view) || state.activeView === view) return;
+  saveCurrentNavigationScroll();
   switchView(view);
   pushNavigationEntry();
 }
 
 function navigateToAboutChild(view) {
   if (!ABOUT_CHILD_VIEWS.has(view) || state.activeView === view) return;
+  saveCurrentNavigationScroll();
   switchView(view);
   pushNavigationEntry();
 }
 
 function navigateBack() {
-  if ((navigationState()?.depth || 0) > 0) history.back();
+  if ((navigationState()?.depth || 0) > 0) { saveCurrentNavigationScroll(); history.back(); }
 }
 
 function applyNavigationState(next) {
@@ -1331,7 +1358,7 @@ function applyNavigationState(next) {
   if (!validView) return;
   applyingNavigationState = true;
   try {
-    switchView(next.view);
+    switchView(next.view, { scrollToTop: false });
     if (next.view === "directories" && (next.directory === null || DIRECTORY_META[next.directory])) {
       state.activeDirectory = next.directory;
       renderDirectories();
@@ -1340,7 +1367,7 @@ function applyNavigationState(next) {
       state.statsMetric = next.statsMetric;
       renderStatistics();
     }
-
+    restorePageScroll(next.scrollTop);
   } finally { applyingNavigationState = false; }
 }
 
@@ -1362,6 +1389,7 @@ function handleNavigationPop(event) {
 }
 
 function initializeNavigation() {
+  if ("scrollRestoration" in history) history.scrollRestoration = "manual";
   replaceNavigationEntry(0);
   window.addEventListener("popstate", handleNavigationPop);
 }
@@ -1484,7 +1512,7 @@ function bindEvents() {
   elements.directoryAdd.addEventListener("click", () => { if (state.activeDirectory) openDirectoryItemForm(state.activeDirectory); });
   for (const input of document.querySelectorAll("#intensity, #intensity-min, #intensity-max")) { input.addEventListener("input", (event) => updateIntensityDisplay(event.currentTarget)); input.addEventListener("change", (event) => snapIntensity(event.currentTarget)); input.addEventListener("keydown", handleIntensityKeydown); } document.querySelector("#pressure-form").addEventListener("input", () => { state.pressureWarningAccepted = false; document.querySelector("#pressure-warning").hidden = true; });
   bindMeasurementConstraints(); elements.diaryList.addEventListener("click", handleDiaryAction);
-  elements.statsContent.addEventListener("click", (event) => { const card = event.target.closest("[data-metric]"); if (!card || state.statsMetric !== "overview") return; state.statsMetric = card.dataset.metric; renderStatistics(); scrollPageToTop(); pushNavigationEntry(); });
+  elements.statsContent.addEventListener("click", (event) => { const card = event.target.closest("[data-metric]"); if (!card || state.statsMetric !== "overview") return; saveCurrentNavigationScroll(); state.statsMetric = card.dataset.metric; renderStatistics(); scrollPageToTop(); pushNavigationEntry(); });
   elements.statsBack.addEventListener("click", navigateBack); elements.statsPeriod.addEventListener("change", () => { elements.customPeriod.hidden = elements.statsPeriod.value !== "custom"; renderStatistics(); }); elements.periodStart.addEventListener("change", renderStatistics); elements.periodEnd.addEventListener("change", renderStatistics);
   elements.statsSubfilters.addEventListener("change", (event) => { if (event.target.id === "glucose-context-filter") state.glucoseContext = event.target.value; if (event.target.id === "glucose-format-filter") state.glucoseFormat = event.target.value; if (event.target.id === "pain-body-part-filter") state.painBodyPart = event.target.value; renderStatistics(); });
   document.querySelector("#export-csv").addEventListener("click", async () => { try { if (await exportCsv(state.data)) showToast("CSV подготовлены"); } catch (error) { showError(document.querySelector("#data-error"), error); } });
