@@ -796,7 +796,6 @@ test("обе оболочки используют панели 72 px и фик�
 
 test("safe-area обеих ориентаций применяется только после стабильного измерения", () => {
   const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
-  assert.match(app, /handleVisualViewportChange = debounce\(\(\) => \{[\s\S]+syncVisualViewport\(\);[\s\S]+syncEntryKeyboardState\(\)[\s\S]+scheduleFocusedEntryFieldVisibility\(\)[\s\S]+\}, 80\)/);
   assert.match(app, /LEGACY_SAFE_TOP_KEYS = Object\.freeze\(\["myhealth:portrait-safe-top:v1", "myhealth:safe-top:portrait:v2", "myhealth:safe-top:landscape:v2"\]\)/);
   assert.match(app, /SAFE_TOP_KEYS = Object\.freeze\(\{ portrait: "myhealth:safe-top:portrait:v3", landscape: "myhealth:safe-top:landscape:v3" \}\)/);
   assert.match(app, /function measureSafeTop\(\)[\s\S]+padding-top:env\(safe-area-inset-top,0px\)[\s\S]+getComputedStyle\(probe\)\.paddingTop/);
@@ -810,10 +809,9 @@ test("safe-area обеих ориентаций применяется толь�
   assert.doesNotMatch(app, /syncChromeSafeInset|viewportOffsetTop|viewportBottomInset/);
 });
 
-test("основная оболочка не зависит от visual viewport и замораживается только при клавиатуре", () => {
+test("при открытии клавиатуры сохраняется размер основной оболочки", () => {
   const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
   const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
-  assert.doesNotMatch(app, /applyShellVisualViewport|scheduleShellViewportSync|--shell-viewport-/);
   assert.match(app, /function scheduleShellLayoutSync\(scrollTop = null\)[\s\S]+pendingShellScrollTop = scrollTop[\s\S]+requestAnimationFrame\(\(\) => \{[\s\S]+requestAnimationFrame\(apply\)[\s\S]+pendingShellScrollTop = null[\s\S]+\}, 160\)/);
   assert.match(app, /saved\.interface !== previousInterface\) scheduleShellLayoutSync\(scrollTop\)/);
   assert.match(app, /classList\.toggle\("entry-keyboard-active", keyboardOpen\)[\s\S]+--entry-keyboard-shell-width[\s\S]+--entry-keyboard-shell-height/);

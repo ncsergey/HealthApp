@@ -11,6 +11,7 @@ import { DAY_PARTS, FOOD_RELATIONS, buildDaySchedule, formatMedicationExpiration
 import { DEFAULT_GLASS_BLUR_INTENSITY, DEFAULT_GLASS_EFFECTS, DEFAULT_GLASS_TRANSPARENCY, DEFAULT_THEME, MAX_GLASS_BLUR_INTENSITY, MAX_GLASS_TRANSPARENCY, MIN_GLASS_BLUR_INTENSITY, MIN_GLASS_TRANSPARENCY, applyGlassBlurIntensity, applyGlassTransparency, applyTheme, applyUiSettings, detectInitialInterface, initializeTheme, initializeUiSettings, saveTheme, saveUiSettings } from "./interface-settings.js";
 import { createAppInfoLoader, createChangeLoader } from "./app-info.js";
 import { createLayoutDiagnostics } from "./layout-diagnostics.js";
+import { syncVisualViewport } from "./viewport.js";
 
 const PAGE_SIZE = 60;
 const BIRTHDAY_EMOJIS = Object.freeze(["🎉", "🥳", "🎂", "🎊", "🎈", "🎁", "🍰"]);
@@ -307,16 +308,6 @@ function showBackupPrompt() {
 
 function handleSuccessfulDataChange(message) { markBackupPending(); showToast(message); showBackupPrompt(); }
 
-function syncVisualViewport() {
-  const viewport = window.visualViewport;
-  if (!viewport) return;
-  const layoutHeight = Math.max(document.documentElement.clientHeight, window.innerHeight);
-  const bottomInset = Math.max(0, layoutHeight - viewport.height - viewport.offsetTop);
-  document.documentElement.style.setProperty("--visual-viewport-height", `${viewport.height}px`);
-  document.documentElement.style.setProperty("--visual-viewport-bottom", `${bottomInset}px`);
-  document.documentElement.style.setProperty("--visual-viewport-offset-top", `${viewport.offsetTop}px`);
-}
-
 function scheduleShellLayoutSync(scrollTop = null) {
   if (Number.isFinite(scrollTop)) pendingShellScrollTop = scrollTop;
   const revision = ++shellLayoutSyncRevision;
@@ -462,6 +453,7 @@ function isMobileEntryViewport() {
 }
 
 function releaseEntryKeyboardShell() {
+  const wasKeyboardActive = document.documentElement.classList.contains("entry-keyboard-active");
   clearTimeout(keyboardShellReleaseTimer);
   keyboardShellReleaseTimer = 0;
   for (const timer of keyboardBackgroundRestoreTimers) clearTimeout(timer);
@@ -469,7 +461,7 @@ function releaseEntryKeyboardShell() {
   document.documentElement.classList.remove("entry-keyboard-active");
   document.documentElement.style.removeProperty("--entry-keyboard-shell-width");
   document.documentElement.style.removeProperty("--entry-keyboard-shell-height");
-  if (!document.documentElement.classList.contains("modal-open")) restorePageScroll(modalScrollY);
+  if (wasKeyboardActive && !document.documentElement.classList.contains("modal-open")) restorePageScroll(modalScrollY);
 }
 
 function scheduleKeyboardBackgroundRestore() {
@@ -1713,12 +1705,16 @@ function bindEvents() {
     });
   });
   if (window.visualViewport) {
-    const handleVisualViewportChange = debounce(() => {
+    const handleVisualViewportChange = () => {
+      // Freeze the background shell before applying a reduced keyboard height.
+      const keyboardOpen = syncEntryKeyboardState();
       syncVisualViewport();
-      if (syncEntryKeyboardState()) scheduleFocusedEntryFieldVisibility();
-    }, 80);
+      if (keyboardOpen) scheduleFocusedEntryFieldVisibility();
+    };
     window.visualViewport.addEventListener("resize", handleVisualViewportChange);
     window.visualViewport.addEventListener("scroll", handleVisualViewportChange);
+    window.addEventListener("resize", handleVisualViewportChange);
+    window.addEventListener("pageshow", handleVisualViewportChange);
   }
   if (typeof ResizeObserver === "function") {
     const entryContentObserver = new ResizeObserver(() => {
