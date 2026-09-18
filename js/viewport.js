@@ -25,7 +25,9 @@ export function bindContentScrollGuard(win = window) {
   if (!main || !content) return;
   const edgeTolerance = 1;
   const updateScrollable = () => {
-    main.classList.toggle("content-fits", main.scrollHeight - main.clientHeight <= edgeTolerance);
+    const fits = main.scrollHeight - main.clientHeight <= edgeTolerance;
+    main.classList.toggle("content-fits", fits);
+    win.document.documentElement.classList.toggle("app-content-fits", fits);
   };
   // Both can resize independently: rotation changes the viewport, while
   // navigation, loaded records and font changes change the content height.

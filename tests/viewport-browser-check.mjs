@@ -130,16 +130,28 @@ async function verifyContentMode(page, fits, enabled = true) {
   const state = await page.locator(".app-main").evaluate((main) => ({
     fits: main.scrollHeight - main.clientHeight <= 1,
     locked: main.classList.contains("content-fits"),
+    rootFits: document.documentElement.classList.contains("app-content-fits"),
     height: main.clientHeight, contentHeight: main.scrollHeight,
     overflow: getComputedStyle(main).overflowY,
     touchAction: getComputedStyle(main).touchAction,
-    overscroll: getComputedStyle(main).overscrollBehaviorY
+    overscroll: getComputedStyle(main).overscrollBehaviorY,
+    scrollbars: [document.documentElement, document.body, main].map((element) => ({
+      standard: getComputedStyle(element).scrollbarWidth,
+      webkit: getComputedStyle(element, "::-webkit-scrollbar").display
+    })),
+    dialogScrollbar: getComputedStyle(document.querySelector(".entry-form-content"), "::-webkit-scrollbar").display
   }));
   assert.equal(state.fits, fits, JSON.stringify(state));
   assert.equal(state.locked, fits && enabled, JSON.stringify(state));
+  assert.equal(state.rootFits, fits && enabled, JSON.stringify(state));
   assert.equal(state.overflow, enabled && fits ? "hidden" : "auto");
   assert.equal(state.touchAction, enabled && fits ? "pan-x" : "auto");
   assert.equal(state.overscroll, enabled ? "none" : "contain");
+  for (const scrollbar of state.scrollbars) {
+    assert.equal(scrollbar.standard, enabled && fits ? "none" : "auto");
+    assert.equal(scrollbar.webkit === "none", enabled && fits, "Legacy scrollbar hiding must follow content size after rotation and navigation");
+  }
+  assert.notEqual(state.dialogScrollbar, "none", "Dialogs keep their own scrollbar");
 }
 
 async function swipeContent(page, { x = 16, reverse = false } = {}) {
