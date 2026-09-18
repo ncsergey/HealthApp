@@ -15,7 +15,8 @@ const PAGE_SIZE = 60;
 const BIRTHDAY_EMOJIS = Object.freeze(["🎉", "🥳", "🎂", "🎊", "🎈", "🎁", "🍰"]);
 const BACKUP_PENDING_KEY = "myhealth:backup-pending:v2";
 const BACKUP_REMINDER_DISMISSED_KEY = "myhealth:backup-reminder-dismissed:v1";
-const PORTRAIT_SAFE_TOP_KEY = "myhealth:portrait-safe-top:v1";
+const LEGACY_PORTRAIT_SAFE_TOP_KEY = "myhealth:portrait-safe-top:v1";
+const SAFE_TOP_KEYS = Object.freeze({ portrait: "myhealth:safe-top:portrait:v2", landscape: "myhealth:safe-top:landscape:v2" });
 const GLUCOSE_CONTEXT = Object.freeze({ fasting: "Натощак", beforeMeal: "Перед едой", after1h: "Через 1 час после начала еды", after2h: "Через 2 часа после начала еды", random: "Случайное измерение" });
 const GLUCOSE_FORMAT = Object.freeze({ plasma: "Эквивалент плазмы", wholeBlood: "Цельная кровь" });
 const PULSE_CONTEXT = Object.freeze({ resting: "В покое", active: "После физической нагрузки", unknown: "Контекст не указан" });
@@ -34,17 +35,18 @@ let modalScrollRestoreFrame = 0;
 let applyingNavigationState = false;
 let pendingRootView = null;
 let modalNavigationState = null;
-let confirmedPortraitSafeTop = null;
-let portraitSafeTopCandidate = null;
-let portraitSafeTopCandidateCount = 0;
-let portraitSafeTopTimers = [];
+const confirmedSafeTop = { portrait: null, landscape: null };
+let safeTopCandidate = null;
+let safeTopCandidateCount = 0;
+let safeTopTimers = [];
+let safeTopSyncRevision = 0;
 let pageScrollRestoreId = 0;
 let entryKeyboardSession = null;
 let focusedEntryScrollFrame = 0;
 let focusedEntryScrollTimer = 0;
-let shellViewportSyncFrame = 0;
-let shellViewportSyncTimer = 0;
-let shellViewportSyncRevision = 0;
+let shellLayoutSyncFrame = 0;
+let shellLayoutSyncTimer = 0;
+let shellLayoutSyncRevision = 0;
 let pendingShellScrollTop = null;
 const loadAppInfoOnce = createAppInfoLoader();
 const loadChangesOnce = createChangeLoader();
@@ -185,7 +187,7 @@ function persistUiSettings(nextSettings) {
   const saved = saveUiSettings(nextSettings);
   state.uiSettings = applyUiSettings(saved);
   renderInterfaceSettings();
-  if (saved.interface !== previousInterface) scheduleShellViewportSync(scrollTop);
+  if (saved.interface !== previousInterface) scheduleShellLayoutSync(scrollTop);
 }
 
 function persistTheme(nextTheme) {
@@ -279,42 +281,21 @@ function syncVisualViewport() {
   document.documentElement.style.setProperty("--visual-viewport-offset-top", `${viewport.offsetTop}px`);
 }
 
-function entryKeyboardIsOpen() {
-  return Boolean(document.querySelector("dialog.entry-form-dialog.entry-keyboard-open[open]"));
-}
-
-function applyShellVisualViewport() {
-  if (entryKeyboardIsOpen()) return false;
-  const viewport = window.visualViewport;
-  const root = document.documentElement;
-  const top = Math.max(0, viewport?.offsetTop || 0);
-  const left = Math.max(0, viewport?.offsetLeft || 0);
-  const width = viewport?.width || root.clientWidth || window.innerWidth;
-  const height = viewport?.height || root.clientHeight || window.innerHeight;
-  root.style.setProperty("--shell-viewport-top", `${top}px`);
-  root.style.setProperty("--shell-viewport-left", `${left}px`);
-  root.style.setProperty("--shell-viewport-width", `${width}px`);
-  root.style.setProperty("--shell-viewport-height", `${height}px`);
-  return true;
-}
-
-function scheduleShellViewportSync(scrollTop = null) {
+function scheduleShellLayoutSync(scrollTop = null) {
   if (Number.isFinite(scrollTop)) pendingShellScrollTop = scrollTop;
-  const revision = ++shellViewportSyncRevision;
-  cancelAnimationFrame(shellViewportSyncFrame);
-  clearTimeout(shellViewportSyncTimer);
+  const revision = ++shellLayoutSyncRevision;
+  cancelAnimationFrame(shellLayoutSyncFrame);
+  clearTimeout(shellLayoutSyncTimer);
   const apply = () => {
-    if (revision !== shellViewportSyncRevision || entryKeyboardIsOpen()) return;
-    syncVisualViewport();
-    applyShellVisualViewport();
+    if (revision !== shellLayoutSyncRevision) return;
     if (Number.isFinite(pendingShellScrollTop)) restorePageScroll(pendingShellScrollTop);
   };
-  shellViewportSyncFrame = requestAnimationFrame(() => {
-    shellViewportSyncFrame = requestAnimationFrame(apply);
+  shellLayoutSyncFrame = requestAnimationFrame(() => {
+    shellLayoutSyncFrame = requestAnimationFrame(apply);
   });
-  shellViewportSyncTimer = setTimeout(() => {
+  shellLayoutSyncTimer = setTimeout(() => {
     apply();
-    if (revision === shellViewportSyncRevision && !entryKeyboardIsOpen()) pendingShellScrollTop = null;
+    if (revision === shellLayoutSyncRevision) pendingShellScrollTop = null;
   }, 160);
 }
 
@@ -322,7 +303,11 @@ function isPortraitViewport() {
   return window.matchMedia("(orientation: portrait)").matches;
 }
 
-function measurePortraitSafeTop() {
+function viewportOrientation() {
+  return isPortraitViewport() ? "portrait" : "landscape";
+}
+
+function measureSafeTop() {
   const probe = document.createElement("div");
   probe.setAttribute("aria-hidden", "true");
   probe.style.cssText = "position:absolute;top:0;left:0;width:0;height:0;padding-top:env(safe-area-inset-top,0px);visibility:hidden;pointer-events:none";
@@ -332,44 +317,47 @@ function measurePortraitSafeTop() {
   return Number.isFinite(value) && value >= 0 && value <= 80 ? value : null;
 }
 
-function restorePortraitSafeTop() {
-  if (confirmedPortraitSafeTop !== null) return;
+function restoreSafeTop(orientation) {
+  if (confirmedSafeTop[orientation] !== null) return confirmedSafeTop[orientation];
   try {
-    const cached = Number.parseFloat(sessionStorage.getItem(PORTRAIT_SAFE_TOP_KEY));
-    if (Number.isFinite(cached) && cached >= 0 && cached <= 80) confirmedPortraitSafeTop = cached;
+    sessionStorage.removeItem(LEGACY_PORTRAIT_SAFE_TOP_KEY);
+    const cached = Number.parseFloat(sessionStorage.getItem(SAFE_TOP_KEYS[orientation]));
+    if (Number.isFinite(cached) && cached >= 0 && cached <= 80) confirmedSafeTop[orientation] = cached;
   } catch { /* session storage unavailable */ }
+  return confirmedSafeTop[orientation];
 }
 
-function applyPortraitSafeTop(value) {
+function applySafeTop(value) {
   document.documentElement.style.setProperty("--shell-safe-top", `${Math.round(value * 100) / 100}px`);
 }
 
-function confirmPortraitSafeTop(value) {
-  confirmedPortraitSafeTop = value;
-  applyPortraitSafeTop(value);
-  try { sessionStorage.setItem(PORTRAIT_SAFE_TOP_KEY, String(value)); } catch { /* session storage unavailable */ }
+function confirmSafeTop(orientation, value, revision) {
+  if (revision !== safeTopSyncRevision || viewportOrientation() !== orientation) return;
+  confirmedSafeTop[orientation] = value;
+  applySafeTop(value);
+  try { sessionStorage.setItem(SAFE_TOP_KEYS[orientation], String(value)); } catch { /* session storage unavailable */ }
 }
 
-function samplePortraitSafeTop() {
-  if (!isPortraitViewport()) return;
-  const measured = measurePortraitSafeTop();
+function sampleSafeTop(orientation, revision, delay) {
+  if (revision !== safeTopSyncRevision || viewportOrientation() !== orientation) return;
+  const measured = measureSafeTop();
   if (measured === null) return;
-  if (portraitSafeTopCandidate !== null && Math.abs(measured - portraitSafeTopCandidate) <= .5) portraitSafeTopCandidateCount += 1;
-  else { portraitSafeTopCandidate = measured; portraitSafeTopCandidateCount = 1; }
-  if (portraitSafeTopCandidateCount < 3) return;
-  if (confirmedPortraitSafeTop === null || measured >= confirmedPortraitSafeTop) confirmPortraitSafeTop(measured);
+  if (safeTopCandidate !== null && Math.abs(measured - safeTopCandidate) <= .5) safeTopCandidateCount += 1;
+  else { safeTopCandidate = measured; safeTopCandidateCount = 1; }
+  if (safeTopCandidateCount < 3 || delay < 360) return;
+  confirmSafeTop(orientation, measured, revision);
 }
 
-function schedulePortraitSafeTopSync() {
-  for (const timer of portraitSafeTopTimers) clearTimeout(timer);
-  portraitSafeTopTimers = [];
-  const root = document.documentElement;
-  if (!isPortraitViewport()) { root.style.removeProperty("--shell-safe-top"); return; }
-  restorePortraitSafeTop();
-  if (confirmedPortraitSafeTop !== null) applyPortraitSafeTop(confirmedPortraitSafeTop);
-  portraitSafeTopCandidate = null;
-  portraitSafeTopCandidateCount = 0;
-  portraitSafeTopTimers = [0, 60, 180, 360, 720, 1200].map((delay) => setTimeout(samplePortraitSafeTop, delay));
+function scheduleSafeTopSync() {
+  for (const timer of safeTopTimers) clearTimeout(timer);
+  safeTopTimers = [];
+  const revision = ++safeTopSyncRevision;
+  const orientation = viewportOrientation();
+  const cached = restoreSafeTop(orientation);
+  if (cached !== null) applySafeTop(cached);
+  safeTopCandidate = null;
+  safeTopCandidateCount = 0;
+  safeTopTimers = [0, 60, 180, 360, 720, 1200, 1600].map((delay) => setTimeout(() => sampleSafeTop(orientation, revision, delay), delay));
 }
 
 function pageScrollContainer() {
@@ -442,7 +430,12 @@ function clearEntryKeyboardState(dialog = entryKeyboardSession?.dialog) {
     dialog.style.removeProperty("--entry-keyboard-viewport-height");
     dialog.style.removeProperty("--entry-keyboard-offset-top");
   }
-  if (!dialog || entryKeyboardSession?.dialog === dialog) entryKeyboardSession = null;
+  if (!dialog || entryKeyboardSession?.dialog === dialog) {
+    entryKeyboardSession = null;
+    document.documentElement.classList.remove("entry-keyboard-active");
+    document.documentElement.style.removeProperty("--entry-keyboard-shell-width");
+    document.documentElement.style.removeProperty("--entry-keyboard-shell-height");
+  }
 }
 
 function expectedEntryViewportHeight() {
@@ -473,12 +466,17 @@ function syncEntryKeyboardState() {
   const threshold = Math.max(ENTRY_KEYBOARD_MIN_REDUCTION, entryKeyboardSession.baselineHeight * .18);
   const keyboardOpen = entryKeyboardSession.baselineHeight - viewport.height >= threshold;
   context.dialog.classList.toggle("entry-keyboard-open", keyboardOpen);
+  document.documentElement.classList.toggle("entry-keyboard-active", keyboardOpen);
   if (keyboardOpen) {
     context.dialog.style.setProperty("--entry-keyboard-viewport-height", `${viewport.height}px`);
     context.dialog.style.setProperty("--entry-keyboard-offset-top", `${viewport.offsetTop}px`);
+    document.documentElement.style.setProperty("--entry-keyboard-shell-width", `${entryKeyboardSession.baselineWidth}px`);
+    document.documentElement.style.setProperty("--entry-keyboard-shell-height", `${entryKeyboardSession.baselineHeight}px`);
   } else {
     context.dialog.style.removeProperty("--entry-keyboard-viewport-height");
     context.dialog.style.removeProperty("--entry-keyboard-offset-top");
+    document.documentElement.style.removeProperty("--entry-keyboard-shell-width");
+    document.documentElement.style.removeProperty("--entry-keyboard-shell-height");
   }
   return keyboardOpen;
 }
@@ -1625,8 +1623,7 @@ function chooseHeadacheEntry() {
 
 function bindEvents() {
   syncVisualViewport();
-  applyShellVisualViewport();
-  schedulePortraitSafeTopSync();
+  scheduleSafeTopSync();
   pageScrollContainer()?.addEventListener("scroll", () => {
     if (document.documentElement.classList.contains("modal-open")) scheduleModalBackgroundScrollRestore();
   }, { passive: true });
@@ -1655,10 +1652,6 @@ function bindEvents() {
     const handleVisualViewportChange = debounce(() => {
       syncVisualViewport();
       if (syncEntryKeyboardState()) scheduleFocusedEntryFieldVisibility();
-      else {
-        applyShellVisualViewport();
-        scheduleShellViewportSync();
-      }
     }, 80);
     window.visualViewport.addEventListener("resize", handleVisualViewportChange);
     window.visualViewport.addEventListener("scroll", handleVisualViewportChange);
@@ -1671,8 +1664,9 @@ function bindEvents() {
   }
   const portraitOrientation = window.matchMedia("(orientation: portrait)");
   const handleOrientationChange = () => {
-    schedulePortraitSafeTopSync();
-    scheduleShellViewportSync(currentPageScrollTop());
+    const scrollTop = document.documentElement.classList.contains("modal-open") ? modalScrollY : currentPageScrollTop();
+    scheduleSafeTopSync();
+    scheduleShellLayoutSync(scrollTop);
   };
   if (typeof portraitOrientation.addEventListener === "function") portraitOrientation.addEventListener("change", handleOrientationChange);
   else portraitOrientation.addListener(handleOrientationChange);

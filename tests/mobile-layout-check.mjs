@@ -65,11 +65,10 @@ async function settle(page) {
 async function waitForShellViewport(page) {
   await page.waitForFunction(() => {
     const shell = document.querySelector(".app-shell")?.getBoundingClientRect();
-    const viewport = visualViewport;
-    if (!shell || !viewport || document.querySelector("dialog.entry-form-dialog.entry-keyboard-open[open]")) return false;
+    if (!shell || document.documentElement.classList.contains("entry-keyboard-active")) return false;
     const close = (first, second) => Math.abs(first - second) <= .75;
-    return close(shell.top, viewport.offsetTop) && close(shell.left, viewport.offsetLeft) &&
-      close(shell.width, viewport.width) && close(shell.height, viewport.height);
+    return close(shell.top, 0) && close(shell.left, 0) &&
+      close(shell.width, document.documentElement.clientWidth) && close(shell.height, document.documentElement.clientHeight);
   }, null, { timeout: 2000 });
 }
 
@@ -138,7 +137,7 @@ async function verifyStableScroll(page, label) {
     assert(closeEnough(start.footer.top, current.footer.top) && closeEnough(start.footer.bottom, current.footer.bottom), `${label}: подвал сдвинулся при прокрутке ${phase}`);
     assert(current.rootScroll === 0, `${label}: прокрутился корневой документ`);
     assert(current.htmlOverflow === "hidden" && current.bodyOverflow === "hidden", `${label}: корневая прокрутка разблокирована`);
-    assert(closeEnough(current.shell.top, current.visualViewport.top) && closeEnough(current.shell.left, current.visualViewport.left) && closeEnough(current.shell.width, current.visualViewport.width) && closeEnough(current.shell.height, current.visualViewport.height), `${label}: оболочка не совпадает с visual viewport`);
+    assert(closeEnough(current.shell.top, 0) && closeEnough(current.shell.left, 0) && closeEnough(current.shell.width, current.viewport.width) && closeEnough(current.shell.height, current.viewport.height), `${label}: оболочка сместилась относительно layout viewport`);
     assert(current.header.top >= current.shell.top - 0.75 && current.footer.bottom <= current.shell.bottom + 0.75, `${label}: панели вышли за viewport`);
   }
   return start;
@@ -312,6 +311,7 @@ async function verifyModalFlow(page, label) {
   await waitForShellViewport(page);
   assert(await page.locator("#headache-dialog").evaluate((dialog) => dialog.open), `${label}: окно закрылось при закрытии клавиатуры`);
   assert(!await page.locator("#headache-dialog").evaluate((dialog) => dialog.classList.contains("entry-keyboard-open")), `${label}: состояние клавиатуры не очищено`);
+  assert(!await page.evaluate(() => document.documentElement.classList.contains("entry-keyboard-active")), `${label}: фиксация оболочки после клавиатуры не очищена`);
   await page.locator("#headache-cancel").click();
   await page.waitForFunction(() => !document.querySelector("#headache-dialog").open);
   await page.waitForTimeout(200);
@@ -374,10 +374,73 @@ async function verifyKeyboardOrientationFlow(page, device) {
   await page.waitForFunction(() => !document.querySelector("#weight-dialog").open);
   await page.waitForTimeout(200);
   assert(!await page.locator("#weight-dialog").evaluate((dialog) => dialog.classList.contains("entry-keyboard-open")), `${device.name}: состояние клавиатуры осталось после закрытия формы`);
+  assert(!await page.evaluate(() => document.documentElement.classList.contains("entry-keyboard-active")), `${device.name}: фиксация оболочки осталась после закрытия формы`);
   const restoredBackground = await page.locator(".app-main").evaluate((node) => ({ scrollTop: node.scrollTop, scrollMax: node.scrollHeight - node.clientHeight }));
   assert(restoredBackground.scrollTop === Math.min(backgroundScroll, restoredBackground.scrollMax), `${device.name}: фон прокрутился при закрытии формы с клавиатурой (${backgroundScroll} → ${restoredBackground.scrollTop}, max ${restoredBackground.scrollMax})`);
   await page.setViewportSize({ width: portraitWidth, height: portraitHeight });
   await settle(page);
+}
+
+async function verifyRotationRoundTrip(page, device) {
+  const [portraitWidth, portraitHeight] = device.portrait;
+  await page.setViewportSize({ width: portraitWidth, height: portraitHeight });
+  await page.locator('[data-interface-choice="modern"]').click();
+  await page.locator('[data-view="diary"]').click();
+  await page.waitForTimeout(1250);
+  await page.evaluate(() => {
+    const content = document.querySelector(".app-content");
+    const fontProbe = document.createElement("p");
+    fontProbe.dataset.rotationFontProbe = "";
+    fontProbe.className = "entry-detail";
+    fontProbe.textContent = "В покое · SpO2 98% · Стресс 12%";
+    const scrollProbe = document.createElement("div");
+    scrollProbe.dataset.rotationScrollProbe = "";
+    scrollProbe.style.height = "1000px";
+    scrollProbe.setAttribute("aria-hidden", "true");
+    content.append(fontProbe, scrollProbe);
+    document.querySelector(".app-main").scrollTop = 120;
+  });
+  await settle(page);
+
+  const rotationState = () => page.evaluate(() => {
+    const shell = document.querySelector(".app-shell").getBoundingClientRect();
+    const header = document.querySelector(".app-header").getBoundingClientRect();
+    const footer = document.querySelector(".bottom-nav").getBoundingClientRect();
+    return {
+      shell: { top: shell.top, left: shell.left, width: shell.width, height: shell.height },
+      header: { top: header.top, bottom: header.bottom },
+      footerBottom: footer.bottom,
+      safeTop: Number.parseFloat(getComputedStyle(document.querySelector(".app-shell")).paddingTop),
+      brandFont: Number.parseFloat(getComputedStyle(document.querySelector(".app-header h1")).fontSize),
+      viewFont: Number.parseFloat(getComputedStyle(document.querySelector("#diary-heading")).fontSize),
+      detailFont: Number.parseFloat(getComputedStyle(document.querySelector("[data-rotation-font-probe]")).fontSize),
+      scrollTop: document.querySelector(".app-main").scrollTop
+    };
+  });
+
+  const baseline = await rotationState();
+  for (let cycle = 1; cycle <= 3; cycle += 1) {
+    await page.setViewportSize({ width: portraitHeight, height: portraitWidth });
+    await page.waitForTimeout(300);
+    assert(await page.evaluate(() => matchMedia("(orientation: landscape)").matches), `${device.name}: цикл ${cycle}, landscape не применился`);
+    await page.setViewportSize({ width: portraitWidth, height: portraitHeight });
+    await page.waitForTimeout(1250);
+    const returned = await rotationState();
+    assert(closeEnough(returned.shell.top, baseline.shell.top) && closeEnough(returned.shell.left, baseline.shell.left) && closeEnough(returned.shell.width, baseline.shell.width) && closeEnough(returned.shell.height, baseline.shell.height), `${device.name}: цикл ${cycle}, оболочка не восстановила геометрию`);
+    assert(closeEnough(returned.header.top, baseline.header.top) && closeEnough(returned.header.bottom, baseline.header.bottom), `${device.name}: цикл ${cycle}, шапка сместилась после возврата в portrait`);
+    assert(closeEnough(returned.footerBottom, baseline.footerBottom), `${device.name}: цикл ${cycle}, подвал сместился после возврата в portrait`);
+    assert(closeEnough(returned.safeTop, baseline.safeTop), `${device.name}: цикл ${cycle}, safe-area изменилась после возврата в portrait`);
+    assert(closeEnough(returned.brandFont, baseline.brandFont) && closeEnough(returned.viewFont, baseline.viewFont) && closeEnough(returned.detailFont, baseline.detailFont), `${device.name}: цикл ${cycle}, размер текста изменился после поворота`);
+    assert(closeEnough(returned.scrollTop, baseline.scrollTop), `${device.name}: цикл ${cycle}, позиция прокрутки изменилась (${baseline.scrollTop} → ${returned.scrollTop})`);
+  }
+
+  await page.evaluate(() => {
+    document.querySelector("[data-rotation-font-probe]")?.remove();
+    document.querySelector("[data-rotation-scroll-probe]")?.remove();
+  });
+  await page.locator("#settings-button").click();
+  await page.locator('[data-settings-target="interface"]').click();
+  await page.locator("#interface-view").waitFor({ state: "visible" });
 }
 
 async function main() {
@@ -437,6 +500,8 @@ async function main() {
           assert(closeEnough(modernBefore.header.top, modernAfter.header.top) && closeEnough(modernBefore.footer.bottom, modernAfter.footer.bottom), `${device.name} ${orientation} ${theme}: панели modern изменили положение после цикла modern → classic → modern`);
         }
       }
+
+      await verifyRotationRoundTrip(page, device);
 
       for (const orientation of ["portrait", "landscape"]) {
         const portrait = orientation === "portrait";

@@ -740,8 +740,9 @@ test("общая оболочка удерживает панели вне ед�
   assert.match(html, /<main id="app" class="app-main">\s+<div class="app-content">/);
   assert.match(html, /<div class="bottom-chrome-anchor">\s+<nav class="bottom-nav"[\s\S]+<\/nav>\s+<\/div>\s+<\/div>\s+<dialog/);
   assert.match(css, /--shell-safe-top: var\(--safe-top\)/);
-  assert.match(css, /--shell-viewport-top: 0px[\s\S]+--shell-viewport-left: 0px[\s\S]+--shell-viewport-width: 100vw[\s\S]+--shell-viewport-height: 100dvh/);
-  assert.match(css, /\.app-shell \{[\s\S]+position: fixed[\s\S]+top: var\(--shell-viewport-top\)[\s\S]+left: var\(--shell-viewport-left\)[\s\S]+width: var\(--shell-viewport-width\)[\s\S]+height: var\(--shell-viewport-height\)[\s\S]+display: grid[\s\S]+grid-template: minmax\(0, 1fr\) \/ minmax\(0, 1fr\)[\s\S]+padding-top: var\(--shell-safe-top\)[\s\S]+padding-bottom: var\(--safe-bottom\)[\s\S]+overflow: hidden/);
+  assert.match(css, /html \{[^}]+-webkit-text-size-adjust: 100%[^}]+text-size-adjust: 100%/);
+  assert.match(css, /\.app-shell \{[\s\S]+position: fixed[\s\S]+inset: 0[\s\S]+display: grid[\s\S]+grid-template: minmax\(0, 1fr\) \/ minmax\(0, 1fr\)[\s\S]+padding-top: var\(--shell-safe-top\)[\s\S]+padding-bottom: var\(--safe-bottom\)[\s\S]+overflow: hidden/);
+  assert.doesNotMatch(css, /--shell-viewport-(?:top|left|width|height)/);
   assert.match(css, /\.top-chrome-anchor,[\s\S]+\.bottom-chrome-anchor \{[\s\S]+position: relative[\s\S]+grid-area: 1 \/ 1[\s\S]+display: flex[\s\S]+pointer-events: none/);
   assert.match(css, /\.top-chrome-anchor \{[^}]+align-self: start/);
   assert.match(css, /\.bottom-chrome-anchor \{[^}]+align-self: end/);
@@ -793,26 +794,31 @@ test("обе оболочки используют панели 72 px и фик�
   assert.doesNotMatch(css, /\.bottom-nav button \{ height: auto; min-height: 0/);
 });
 
-test("портретный safe-area оболочки сохраняется только после подтверждения", () => {
+test("safe-area обеих ориентаций применяется только после стабильного измерения", () => {
   const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
-  assert.match(app, /handleVisualViewportChange = debounce\(\(\) => \{[\s\S]+syncVisualViewport\(\);[\s\S]+syncEntryKeyboardState\(\)[\s\S]+scheduleFocusedEntryFieldVisibility\(\)[\s\S]+applyShellVisualViewport\(\)[\s\S]+scheduleShellViewportSync\(\)[\s\S]+\}, 80\)/);
-  assert.match(app, /PORTRAIT_SAFE_TOP_KEY = "myhealth:portrait-safe-top:v1"/);
-  assert.match(app, /function measurePortraitSafeTop\(\)[\s\S]+padding-top:env\(safe-area-inset-top,0px\)[\s\S]+getComputedStyle\(probe\)\.paddingTop/);
-  assert.match(app, /function samplePortraitSafeTop\(\)[\s\S]+portraitSafeTopCandidateCount < 3[\s\S]+confirmedPortraitSafeTop === null \|\| measured >= confirmedPortraitSafeTop[\s\S]+confirmPortraitSafeTop\(measured\)/);
-  assert.match(app, /function schedulePortraitSafeTopSync\(\)[\s\S]+removeProperty\("--shell-safe-top"\)[\s\S]+applyPortraitSafeTop\(confirmedPortraitSafeTop\)[\s\S]+\[0, 60, 180, 360, 720, 1200\]/);
-  assert.match(app, /handleOrientationChange = \(\) => \{[\s\S]+schedulePortraitSafeTopSync\(\);[\s\S]+scheduleShellViewportSync\(currentPageScrollTop\(\)\);[\s\S]+\}/);
+  assert.match(app, /handleVisualViewportChange = debounce\(\(\) => \{[\s\S]+syncVisualViewport\(\);[\s\S]+syncEntryKeyboardState\(\)[\s\S]+scheduleFocusedEntryFieldVisibility\(\)[\s\S]+\}, 80\)/);
+  assert.match(app, /LEGACY_PORTRAIT_SAFE_TOP_KEY = "myhealth:portrait-safe-top:v1"/);
+  assert.match(app, /SAFE_TOP_KEYS = Object\.freeze\(\{ portrait: "myhealth:safe-top:portrait:v2", landscape: "myhealth:safe-top:landscape:v2" \}\)/);
+  assert.match(app, /function measureSafeTop\(\)[\s\S]+padding-top:env\(safe-area-inset-top,0px\)[\s\S]+getComputedStyle\(probe\)\.paddingTop/);
+  assert.match(app, /function restoreSafeTop\(orientation\)[\s\S]+removeItem\(LEGACY_PORTRAIT_SAFE_TOP_KEY\)[\s\S]+SAFE_TOP_KEYS\[orientation\]/);
+  assert.match(app, /function sampleSafeTop\(orientation, revision, delay\)[\s\S]+safeTopCandidateCount < 3 \|\| delay < 360[\s\S]+confirmSafeTop\(orientation, measured, revision\)/);
+  assert.doesNotMatch(app, /measured >= confirmedSafeTop/);
+  assert.match(app, /function scheduleSafeTopSync\(\)[\s\S]+restoreSafeTop\(orientation\)[\s\S]+applySafeTop\(cached\)[\s\S]+\[0, 60, 180, 360, 720, 1200, 1600\]/);
+  assert.match(app, /handleOrientationChange = \(\) => \{[\s\S]+classList\.contains\("modal-open"\) \? modalScrollY : currentPageScrollTop\(\)[\s\S]+scheduleSafeTopSync\(\);[\s\S]+scheduleShellLayoutSync\(scrollTop\);[\s\S]+\}/);
   assert.match(app, /portraitOrientation\.addEventListener\("change", handleOrientationChange\)/);
   assert.match(app, /addEventListener\("orientationchange", handleOrientationChange\)/);
   assert.doesNotMatch(app, /syncChromeSafeInset|viewportOffsetTop|viewportBottomInset/);
 });
 
-test("оболочка синхронизируется с visual viewport и не меняет геометрию при клавиатуре", () => {
+test("основная оболочка не зависит от visual viewport и замораживается только при клавиатуре", () => {
   const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
-  assert.match(app, /function entryKeyboardIsOpen\(\)[\s\S]+dialog\.entry-form-dialog\.entry-keyboard-open\[open\]/);
-  assert.match(app, /function applyShellVisualViewport\(\)[\s\S]+if \(entryKeyboardIsOpen\(\)\) return false[\s\S]+viewport\?\.offsetTop[\s\S]+viewport\?\.offsetLeft[\s\S]+--shell-viewport-top[\s\S]+--shell-viewport-left[\s\S]+--shell-viewport-width[\s\S]+--shell-viewport-height/);
-  assert.match(app, /function scheduleShellViewportSync\(scrollTop = null\)[\s\S]+pendingShellScrollTop = scrollTop[\s\S]+requestAnimationFrame\(\(\) => \{[\s\S]+requestAnimationFrame\(apply\)[\s\S]+setTimeout\(\(\) => \{[\s\S]+pendingShellScrollTop = null[\s\S]+\}, 160\)/);
-  assert.match(app, /saved\.interface !== previousInterface\) scheduleShellViewportSync\(scrollTop\)/);
-  assert.doesNotMatch(app, /scheduleShellViewportSync[\s\S]{0,600}window\.scrollTo/);
+  const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
+  assert.doesNotMatch(app, /applyShellVisualViewport|scheduleShellViewportSync|--shell-viewport-/);
+  assert.match(app, /function scheduleShellLayoutSync\(scrollTop = null\)[\s\S]+pendingShellScrollTop = scrollTop[\s\S]+requestAnimationFrame\(\(\) => \{[\s\S]+requestAnimationFrame\(apply\)[\s\S]+pendingShellScrollTop = null[\s\S]+\}, 160\)/);
+  assert.match(app, /saved\.interface !== previousInterface\) scheduleShellLayoutSync\(scrollTop\)/);
+  assert.match(app, /classList\.toggle\("entry-keyboard-active", keyboardOpen\)[\s\S]+--entry-keyboard-shell-width[\s\S]+--entry-keyboard-shell-height/);
+  assert.match(css, /html\.entry-keyboard-active \.app-shell \{[^}]+right: auto[^}]+bottom: auto[^}]+width: var\(--entry-keyboard-shell-width, 100%\)[^}]+height: var\(--entry-keyboard-shell-height, 100%\)/);
+  assert.doesNotMatch(app, /scheduleShellLayoutSync[\s\S]{0,600}window\.scrollTo/);
 });
 
 test("оба интерфейса прокручивают только содержимое неподвижной оболочки", () => {
