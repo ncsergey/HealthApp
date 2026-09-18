@@ -128,6 +128,31 @@ async function verifyStableScroll(page, label) {
   return start;
 }
 
+async function verifyClassicHeader(page, label) {
+  const state = await page.evaluate(() => {
+    const header = document.querySelector(".app-header").getBoundingClientRect();
+    const brandIcon = document.querySelector(".brand-icon-container").getBoundingClientRect();
+    const settings = document.querySelector("#settings-button").getBoundingClientRect();
+    return {
+      interfaceName: document.documentElement.dataset.interface,
+      header: { top: header.top, left: header.left, right: header.right, height: header.height },
+      shellSafeTop: Number.parseFloat(getComputedStyle(document.querySelector(".app-shell")).paddingTop),
+      viewportWidth: innerWidth,
+      brandIcon: { width: brandIcon.width, height: brandIcon.height },
+      settings: { width: settings.width, height: settings.height },
+      titleSize: Number.parseFloat(getComputedStyle(document.querySelector(".app-header h1")).fontSize),
+      eyebrowSize: Number.parseFloat(getComputedStyle(document.querySelector(".app-header .eyebrow")).fontSize)
+    };
+  });
+  assert(state.interfaceName === "classic", `${label}: классический интерфейс не включён`);
+  assert(closeEnough(state.header.top, state.shellSafeTop), `${label}: шапка не закреплена у верхнего края`);
+  assert(closeEnough(state.header.left, 0) && closeEnough(state.header.right, state.viewportWidth), `${label}: шапка не занимает верхний край по ширине`);
+  assert(closeEnough(state.header.height, 72), `${label}: высота шапки изменилась`);
+  assert(closeEnough(state.brandIcon.width, 52) && closeEnough(state.brandIcon.height, 52), `${label}: логотип шапки стал компактнее`);
+  assert(closeEnough(state.settings.width, 52) && closeEnough(state.settings.height, 52), `${label}: кнопка настроек стала компактнее`);
+  assert(closeEnough(state.titleSize, 21) && closeEnough(state.eyebrowSize, 11), `${label}: текст шапки стал компактнее`);
+}
+
 async function verifyDialogState(page, dialogSelector, expectedOpen, label) {
   const state = await page.evaluate(({ selector, open }) => {
     const dialog = document.querySelector(selector);
@@ -380,6 +405,7 @@ async function main() {
 
           await page.locator('[data-interface-choice="classic"]').click();
           await settle(page);
+          await verifyClassicHeader(page, `${device.name} ${orientation} ${theme}`);
           await verifyStableScroll(page, `${device.name} ${orientation} ${theme} classic`);
 
           await page.locator('[data-interface-choice="modern"]').click();

@@ -762,6 +762,18 @@ test("в классическом интерфейсе сетка нижнего
   assert.match(desktop, new RegExp(`html\\[data-interface="classic"\\] \\.bottom-nav \\{[\\s\\S]+padding-right: ${inset.replace(/[()]/g, "\\$&")};[\\s\\S]+padding-left: ${inset.replace(/[()]/g, "\\$&")};`));
 });
 
+test("классическая шапка остаётся полноразмерной у верхнего края во всех ориентациях", () => {
+  const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
+  const landscapeStart = css.indexOf("@media (orientation: landscape) and (max-height: 500px)");
+  const landscapeEnd = css.indexOf("/* Большие мониторы", landscapeStart);
+  const landscapeCss = css.slice(landscapeStart, landscapeEnd);
+  assert.match(css, /html\[data-interface="classic"\] \.top-chrome-anchor \{[^}]+align-self: start[^}]+justify-self: stretch[^}]+width: 100%/);
+  assert.match(landscapeCss, /html\[data-interface="classic"\] \.app-header \{[^}]+width: 100%[^}]+height: 72px[^}]+padding: 10px/);
+  assert.match(landscapeCss, /html\[data-interface="classic"\] \.app-header \.brand \{ gap: 11px; \}/);
+  assert.match(landscapeCss, /html\[data-interface="classic"\] \.app-header h1 \{ font-size: 21px; \}/);
+  assert.match(landscapeCss, /html\[data-interface="classic"\] \.app-header \.eyebrow \{ font-size: 11px; \}/);
+});
+
 test("обе оболочки используют панели 72 px и фиксированные элементы шапки 52 px", () => {
   const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
   assert.match(css, /\.app-header \{[\s\S]+height: 72px; padding: 10px[^;]+ 9px/);
