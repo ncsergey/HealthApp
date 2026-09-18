@@ -42,6 +42,10 @@ let pageScrollRestoreId = 0;
 let entryKeyboardSession = null;
 let focusedEntryScrollFrame = 0;
 let focusedEntryScrollTimer = 0;
+let shellViewportSyncFrame = 0;
+let shellViewportSyncTimer = 0;
+let shellViewportSyncRevision = 0;
+let pendingShellScrollTop = null;
 const loadAppInfoOnce = createAppInfoLoader();
 const loadChangesOnce = createChangeLoader();
 
@@ -176,9 +180,12 @@ function renderInterfaceSettings() {
 }
 
 function persistUiSettings(nextSettings) {
+  const previousInterface = state.uiSettings.interface;
+  const scrollTop = currentPageScrollTop();
   const saved = saveUiSettings(nextSettings);
   state.uiSettings = applyUiSettings(saved);
   renderInterfaceSettings();
+  if (saved.interface !== previousInterface) scheduleShellViewportSync(scrollTop);
 }
 
 function persistTheme(nextTheme) {
@@ -270,6 +277,45 @@ function syncVisualViewport() {
   document.documentElement.style.setProperty("--visual-viewport-height", `${viewport.height}px`);
   document.documentElement.style.setProperty("--visual-viewport-bottom", `${bottomInset}px`);
   document.documentElement.style.setProperty("--visual-viewport-offset-top", `${viewport.offsetTop}px`);
+}
+
+function entryKeyboardIsOpen() {
+  return Boolean(document.querySelector("dialog.entry-form-dialog.entry-keyboard-open[open]"));
+}
+
+function applyShellVisualViewport() {
+  if (entryKeyboardIsOpen()) return false;
+  const viewport = window.visualViewport;
+  const root = document.documentElement;
+  const top = Math.max(0, viewport?.offsetTop || 0);
+  const left = Math.max(0, viewport?.offsetLeft || 0);
+  const width = viewport?.width || root.clientWidth || window.innerWidth;
+  const height = viewport?.height || root.clientHeight || window.innerHeight;
+  root.style.setProperty("--shell-viewport-top", `${top}px`);
+  root.style.setProperty("--shell-viewport-left", `${left}px`);
+  root.style.setProperty("--shell-viewport-width", `${width}px`);
+  root.style.setProperty("--shell-viewport-height", `${height}px`);
+  return true;
+}
+
+function scheduleShellViewportSync(scrollTop = null) {
+  if (Number.isFinite(scrollTop)) pendingShellScrollTop = scrollTop;
+  const revision = ++shellViewportSyncRevision;
+  cancelAnimationFrame(shellViewportSyncFrame);
+  clearTimeout(shellViewportSyncTimer);
+  const apply = () => {
+    if (revision !== shellViewportSyncRevision || entryKeyboardIsOpen()) return;
+    syncVisualViewport();
+    applyShellVisualViewport();
+    if (Number.isFinite(pendingShellScrollTop)) restorePageScroll(pendingShellScrollTop);
+  };
+  shellViewportSyncFrame = requestAnimationFrame(() => {
+    shellViewportSyncFrame = requestAnimationFrame(apply);
+  });
+  shellViewportSyncTimer = setTimeout(() => {
+    apply();
+    if (revision === shellViewportSyncRevision && !entryKeyboardIsOpen()) pendingShellScrollTop = null;
+  }, 160);
 }
 
 function isPortraitViewport() {
@@ -1579,6 +1625,7 @@ function chooseHeadacheEntry() {
 
 function bindEvents() {
   syncVisualViewport();
+  applyShellVisualViewport();
   schedulePortraitSafeTopSync();
   pageScrollContainer()?.addEventListener("scroll", () => {
     if (document.documentElement.classList.contains("modal-open")) scheduleModalBackgroundScrollRestore();
@@ -1608,6 +1655,10 @@ function bindEvents() {
     const handleVisualViewportChange = debounce(() => {
       syncVisualViewport();
       if (syncEntryKeyboardState()) scheduleFocusedEntryFieldVisibility();
+      else {
+        applyShellVisualViewport();
+        scheduleShellViewportSync();
+      }
     }, 80);
     window.visualViewport.addEventListener("resize", handleVisualViewportChange);
     window.visualViewport.addEventListener("scroll", handleVisualViewportChange);
@@ -1619,9 +1670,13 @@ function bindEvents() {
     document.querySelectorAll("dialog.entry-form-dialog .entry-form-content").forEach((content) => entryContentObserver.observe(content));
   }
   const portraitOrientation = window.matchMedia("(orientation: portrait)");
-  if (typeof portraitOrientation.addEventListener === "function") portraitOrientation.addEventListener("change", schedulePortraitSafeTopSync);
-  else portraitOrientation.addListener(schedulePortraitSafeTopSync);
-  window.addEventListener("orientationchange", schedulePortraitSafeTopSync);
+  const handleOrientationChange = () => {
+    schedulePortraitSafeTopSync();
+    scheduleShellViewportSync(currentPageScrollTop());
+  };
+  if (typeof portraitOrientation.addEventListener === "function") portraitOrientation.addEventListener("change", handleOrientationChange);
+  else portraitOrientation.addListener(handleOrientationChange);
+  window.addEventListener("orientationchange", handleOrientationChange);
   document.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => closeDialog(button.closest("dialog")))); document.querySelectorAll("dialog").forEach((dialog) => {
     dialog.addEventListener("close", () => {
       clearEntryKeyboardState(dialog);

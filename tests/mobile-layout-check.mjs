@@ -62,6 +62,17 @@ async function settle(page) {
   await page.waitForTimeout(30);
 }
 
+async function waitForShellViewport(page) {
+  await page.waitForFunction(() => {
+    const shell = document.querySelector(".app-shell")?.getBoundingClientRect();
+    const viewport = visualViewport;
+    if (!shell || !viewport || document.querySelector("dialog.entry-form-dialog.entry-keyboard-open[open]")) return false;
+    const close = (first, second) => Math.abs(first - second) <= .75;
+    return close(shell.top, viewport.offsetTop) && close(shell.left, viewport.offsetLeft) &&
+      close(shell.width, viewport.width) && close(shell.height, viewport.height);
+  }, null, { timeout: 2000 });
+}
+
 async function waitForDialogMotion(page, selector) {
   await page.locator(selector).evaluate(async (dialog) => {
     if (typeof dialog.getAnimations !== "function") return;
@@ -71,13 +82,17 @@ async function waitForDialogMotion(page, selector) {
 }
 
 async function measure(page) {
+  await waitForShellViewport(page);
   return page.evaluate(() => {
+    const shell = document.querySelector(".app-shell").getBoundingClientRect();
     const header = document.querySelector(".app-header").getBoundingClientRect();
     const footer = document.querySelector(".bottom-nav").getBoundingClientRect();
     const main = document.querySelector(".app-main");
     return {
       header: { top: header.top, bottom: header.bottom },
       footer: { top: footer.top, bottom: footer.bottom },
+      shell: { top: shell.top, left: shell.left, right: shell.right, bottom: shell.bottom, width: shell.width, height: shell.height },
+      visualViewport: { top: visualViewport?.offsetTop || 0, left: visualViewport?.offsetLeft || 0, width: visualViewport?.width || innerWidth, height: visualViewport?.height || innerHeight },
       scrollTop: main.scrollTop,
       scrollHeight: main.scrollHeight,
       clientHeight: main.clientHeight,
@@ -123,7 +138,8 @@ async function verifyStableScroll(page, label) {
     assert(closeEnough(start.footer.top, current.footer.top) && closeEnough(start.footer.bottom, current.footer.bottom), `${label}: подвал сдвинулся при прокрутке ${phase}`);
     assert(current.rootScroll === 0, `${label}: прокрутился корневой документ`);
     assert(current.htmlOverflow === "hidden" && current.bodyOverflow === "hidden", `${label}: корневая прокрутка разблокирована`);
-    assert(current.header.top >= -0.75 && current.footer.bottom <= current.viewport.height + 0.75, `${label}: панели вышли за viewport`);
+    assert(closeEnough(current.shell.top, current.visualViewport.top) && closeEnough(current.shell.left, current.visualViewport.left) && closeEnough(current.shell.width, current.visualViewport.width) && closeEnough(current.shell.height, current.visualViewport.height), `${label}: оболочка не совпадает с visual viewport`);
+    assert(current.header.top >= current.shell.top - 0.75 && current.footer.bottom <= current.shell.bottom + 0.75, `${label}: панели вышли за viewport`);
   }
   return start;
 }
@@ -131,13 +147,14 @@ async function verifyStableScroll(page, label) {
 async function verifyClassicHeader(page, label) {
   const state = await page.evaluate(() => {
     const header = document.querySelector(".app-header").getBoundingClientRect();
+    const shell = document.querySelector(".app-shell").getBoundingClientRect();
     const brandIcon = document.querySelector(".brand-icon-container").getBoundingClientRect();
     const settings = document.querySelector("#settings-button").getBoundingClientRect();
     return {
       interfaceName: document.documentElement.dataset.interface,
       header: { top: header.top, left: header.left, right: header.right, height: header.height },
+      shell: { top: shell.top, left: shell.left, right: shell.right },
       shellSafeTop: Number.parseFloat(getComputedStyle(document.querySelector(".app-shell")).paddingTop),
-      viewportWidth: innerWidth,
       brandIcon: { width: brandIcon.width, height: brandIcon.height },
       settings: { width: settings.width, height: settings.height },
       titleSize: Number.parseFloat(getComputedStyle(document.querySelector(".app-header h1")).fontSize),
@@ -145,8 +162,8 @@ async function verifyClassicHeader(page, label) {
     };
   });
   assert(state.interfaceName === "classic", `${label}: классический интерфейс не включён`);
-  assert(closeEnough(state.header.top, state.shellSafeTop), `${label}: шапка не закреплена у верхнего края`);
-  assert(closeEnough(state.header.left, 0) && closeEnough(state.header.right, state.viewportWidth), `${label}: шапка не занимает верхний край по ширине`);
+  assert(closeEnough(state.header.top, state.shell.top + state.shellSafeTop), `${label}: шапка не закреплена у верхнего края`);
+  assert(closeEnough(state.header.left, state.shell.left) && closeEnough(state.header.right, state.shell.right), `${label}: шапка не занимает верхний край по ширине`);
   assert(closeEnough(state.header.height, 72), `${label}: высота шапки изменилась`);
   assert(closeEnough(state.brandIcon.width, 52) && closeEnough(state.brandIcon.height, 52), `${label}: логотип шапки стал компактнее`);
   assert(closeEnough(state.settings.width, 52) && closeEnough(state.settings.height, 52), `${label}: кнопка настроек стала компактнее`);
@@ -197,10 +214,11 @@ async function verifyModalFlow(page, label) {
 
   const initial = await page.evaluate(() => {
     const dialog = document.querySelector("#headache-dialog");
+    const shell = document.querySelector(".app-shell").getBoundingClientRect();
     const content = dialog.querySelector(".entry-form-content");
     const header = dialog.querySelector(".dialog-header").getBoundingClientRect();
     const actions = dialog.querySelector(".dialog-actions").getBoundingClientRect();
-    return { header: { top: header.top, bottom: header.bottom }, actions: { top: actions.top, bottom: actions.bottom }, scrollHeight: content.scrollHeight, clientHeight: content.clientHeight };
+    return { shell: { top: shell.top, left: shell.left, width: shell.width, height: shell.height }, header: { top: header.top, bottom: header.bottom }, actions: { top: actions.top, bottom: actions.bottom }, scrollHeight: content.scrollHeight, clientHeight: content.clientHeight };
   });
   assert(initial.scrollHeight > initial.clientHeight, `${label}: содержимое длинной формы не прокручивается`);
   const scrollTarget = Math.min(initial.scrollHeight - initial.clientHeight, Math.max(80, Math.round(initial.clientHeight * 0.7)));
@@ -236,10 +254,12 @@ async function verifyModalFlow(page, label) {
     const focused = document.querySelector("#headache-comment").getBoundingClientRect();
     const contentRect = content.getBoundingClientRect();
     const dialogRect = dialog.getBoundingClientRect();
+    const shell = document.querySelector(".app-shell").getBoundingClientRect();
     const actions = dialog.querySelector(".dialog-actions").getBoundingClientRect();
     return {
       active: document.activeElement?.id,
       dialogOpen: dialog.open,
+      shell: { top: shell.top, left: shell.left, width: shell.width, height: shell.height },
       dialogTop: dialogRect.top,
       dialogBottom: dialogRect.bottom,
       actionsBottom: actions.bottom,
@@ -256,6 +276,7 @@ async function verifyModalFlow(page, label) {
   });
   const keyboardIssues = [];
   if (!keyboardOpen.keyboardClass) keyboardIssues.push("компактный режим клавиатуры не включился");
+  if (!closeEnough(initial.shell.top, keyboardOpen.shell.top) || !closeEnough(initial.shell.left, keyboardOpen.shell.left) || !closeEnough(initial.shell.width, keyboardOpen.shell.width) || !closeEnough(initial.shell.height, keyboardOpen.shell.height)) keyboardIssues.push("основная оболочка изменила геометрию при открытии клавиатуры");
   if (keyboardOpen.active !== "headache-comment" || !keyboardOpen.dialogOpen) keyboardIssues.push("фокус потерян при открытии клавиатуры");
   if (keyboardOpen.dialogTop < -0.75 || keyboardOpen.dialogBottom > keyboardOpen.visualHeight + 0.75) keyboardIssues.push("окно вышло за visual viewport при открытой клавиатуре");
   if (keyboardOpen.actionsBottom > keyboardOpen.visualHeight + 0.75) keyboardIssues.push("нижние действия перекрыты клавиатурой");
@@ -288,6 +309,7 @@ async function verifyModalFlow(page, label) {
   await page.locator("#headache-comment").evaluate((node) => node.blur());
   await page.setViewportSize(viewport);
   await page.waitForTimeout(180);
+  await waitForShellViewport(page);
   assert(await page.locator("#headache-dialog").evaluate((dialog) => dialog.open), `${label}: окно закрылось при закрытии клавиатуры`);
   assert(!await page.locator("#headache-dialog").evaluate((dialog) => dialog.classList.contains("entry-keyboard-open")), `${label}: состояние клавиатуры не очищено`);
   await page.locator("#headache-cancel").click();
@@ -352,7 +374,8 @@ async function verifyKeyboardOrientationFlow(page, device) {
   await page.waitForFunction(() => !document.querySelector("#weight-dialog").open);
   await page.waitForTimeout(200);
   assert(!await page.locator("#weight-dialog").evaluate((dialog) => dialog.classList.contains("entry-keyboard-open")), `${device.name}: состояние клавиатуры осталось после закрытия формы`);
-  assert(await page.locator(".app-main").evaluate((node) => node.scrollTop) === backgroundScroll, `${device.name}: фон прокрутился при закрытии формы с клавиатурой`);
+  const restoredBackground = await page.locator(".app-main").evaluate((node) => ({ scrollTop: node.scrollTop, scrollMax: node.scrollHeight - node.clientHeight }));
+  assert(restoredBackground.scrollTop === Math.min(backgroundScroll, restoredBackground.scrollMax), `${device.name}: фон прокрутился при закрытии формы с клавиатурой (${backgroundScroll} → ${restoredBackground.scrollTop}, max ${restoredBackground.scrollMax})`);
   await page.setViewportSize({ width: portraitWidth, height: portraitHeight });
   await settle(page);
 }
