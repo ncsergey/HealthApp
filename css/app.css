@@ -169,6 +169,11 @@ h3 { margin-bottom: 8px; font-size: 18px; }
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
 }
+html.ios-standalone-viewport .app-main { overscroll-behavior-y: none; }
+html.ios-standalone-viewport .app-main.content-fits {
+  overflow-y: hidden;
+  touch-action: pan-x;
+}
 html.modal-open .app-main { overflow-y: hidden; overscroll-behavior: none; }
 .section-heading { display: flex; align-items: end; justify-content: space-between; margin-bottom: 18px; }
 .status-banner { margin-bottom: 14px; padding: 10px 13px; border: 1px solid color-mix(in srgb, var(--primary) 25%, var(--line)); border-radius: 13px; background: var(--primary-soft); color: var(--primary-strong); font-size: 13px; font-weight: 650; }

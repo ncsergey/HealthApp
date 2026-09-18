@@ -84,11 +84,10 @@ async function viewportEvent(page, values, event = "resize") {
 
 async function verifyPanelGestures(page, enabled) {
   const result = await page.evaluate(() => {
-    const touchActions = [".app-header", ".bottom-nav", ".app-main"].map((selector) => getComputedStyle(document.querySelector(selector)).touchAction);
+    const touchActions = [".app-header", ".bottom-nav"].map((selector) => getComputedStyle(document.querySelector(selector)).touchAction);
     const events = [];
-    // Child targets exercise bubbling to the panels. A content gesture keeps
-    // its original target even when the finger moves over the header.
-    for (const selector of ["#settings-button", ".bottom-nav .nav-label", ".app-main"]) {
+    // Child targets exercise bubbling to the panels.
+    for (const selector of ["#settings-button", ".bottom-nav .nav-label"]) {
       const target = document.querySelector(selector);
       for (const type of ["touchstart", "touchmove", "touchend"]) {
         const touch = new Touch({ identifier: 1, target, clientX: 100, clientY: type === "touchstart" ? 400 : 30 });
@@ -100,29 +99,105 @@ async function verifyPanelGestures(page, enabled) {
     }
     return { touchActions, events };
   });
-  assert.deepEqual(result.touchActions, [enabled ? "none" : "auto", enabled ? "none" : "auto", "auto"]);
+  assert.deepEqual(result.touchActions, [enabled ? "none" : "auto", enabled ? "none" : "auto"]);
   for (const { selector, type, prevented } of result.events) {
-    assert.equal(prevented, enabled && selector !== ".app-main" && type === "touchmove", `${selector} ${type}`);
+    assert.equal(prevented, enabled && type === "touchmove", `${selector} ${type}`);
   }
 }
 
-async function verifyContentSwipe(page) {
-  await page.locator(".app-main").evaluate((main) => { main.scrollTop = 0; });
-  assert.equal(await page.evaluate(() => Boolean(document.elementFromPoint(16, 450)?.closest(".app-main"))), true);
+async function contentGesture(page, { top = 0, deltaY = 40, deltaX = 0 } = {}) {
+  const result = await page.evaluate(({ top, deltaY, deltaX }) => {
+    const main = document.querySelector(".app-main");
+    main.scrollTop = top === "bottom" ? main.scrollHeight - main.clientHeight : top;
+    const target = document.querySelector(".app-content");
+    const prevented = [];
+    for (const type of ["touchstart", "touchmove", "touchend"]) {
+      const touch = new Touch({ identifier: 1, target, clientX: 150 + (type === "touchstart" ? 0 : deltaX), clientY: 300 + (type === "touchstart" ? 0 : deltaY) });
+      const touches = type === "touchend" ? [] : [touch];
+      const event = new TouchEvent(type, { bubbles: true, cancelable: true, touches, targetTouches: touches, changedTouches: [touch] });
+      target.dispatchEvent(event);
+      prevented.push(event.defaultPrevented);
+    }
+    return prevented;
+  }, { top, deltaY, deltaX });
+  assert.equal(result[0], false, "Touches must still start normally");
+  assert.equal(result[2], false, "Touches must still end normally");
+  return result[1];
+}
+
+async function verifyContentMode(page, fits, enabled = true) {
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+  const state = await page.locator(".app-main").evaluate((main) => ({
+    fits: main.scrollHeight - main.clientHeight <= 1,
+    locked: main.classList.contains("content-fits"),
+    height: main.clientHeight, contentHeight: main.scrollHeight,
+    overflow: getComputedStyle(main).overflowY,
+    touchAction: getComputedStyle(main).touchAction,
+    overscroll: getComputedStyle(main).overscrollBehaviorY
+  }));
+  assert.equal(state.fits, fits, JSON.stringify(state));
+  assert.equal(state.locked, fits && enabled, JSON.stringify(state));
+  assert.equal(state.overflow, enabled && fits ? "hidden" : "auto");
+  assert.equal(state.touchAction, enabled && fits ? "pan-x" : "auto");
+  assert.equal(state.overscroll, enabled ? "none" : "contain");
+}
+
+async function swipeContent(page, { x = 16, reverse = false } = {}) {
+  const { height } = await page.locator(".app-main").boundingBox();
+  const start = height * (reverse ? 0.4 : 0.7);
+  const end = height * (reverse ? 0.7 : 0.4);
+  assert.equal(await page.evaluate(({ x, y }) => Boolean(document.elementFromPoint(x, y)?.closest(".app-main")), { x, y: start }), true);
   const session = await page.context().newCDPSession(page);
   try {
-    await session.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: 16, y: 450 }] });
+    await session.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y: start }] });
     for (let step = 1; step <= 10; step++) {
-      await session.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: 16, y: 450 - step * 20 }] });
+      await session.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x, y: start + (end - start) * step / 10 }] });
       await page.waitForTimeout(20);
     }
     // Hold before release so momentum cannot affect the following checks.
     await page.waitForTimeout(300);
     await session.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-    assert.ok(await page.locator(".app-main").evaluate((main) => main.scrollTop > 50), "Content must still scroll with a native touch gesture");
   } finally {
     await session.detach();
   }
+}
+
+async function verifyContentSwipe(page) {
+  await page.locator(".app-main").evaluate((main) => { main.scrollTop = 0; });
+  await swipeContent(page);
+  assert.ok(await page.locator(".app-main").evaluate((main) => main.scrollTop > 50), "Content must still scroll with a native touch gesture");
+}
+
+async function verifyShortContent(page, gap) {
+  // Controlled content size: it fits in portrait but needs real scrolling in
+  // landscape, even when the directory cards reflow into several columns.
+  await page.locator("#directories-content").evaluate((content) => {
+    const main = document.querySelector(".app-main");
+    const padding = parseFloat(getComputedStyle(document.querySelector(".app-content")).paddingBottom);
+    const top = content.getBoundingClientRect().top - main.getBoundingClientRect().top;
+    content.style.minHeight = `${Math.floor(main.clientHeight - top - padding - 24)}px`;
+  });
+  await verifyContentMode(page, true);
+  for (const deltaY of [-40, 40]) assert.equal(await contentGesture(page, { deltaY }), true, "Short screens must block vertical dragging in either direction");
+  assert.equal(await contentGesture(page, { deltaY: 2, deltaX: 40 }), false, "Horizontal controls stay available");
+  // A list that fits in portrait needs scrolling in landscape, and must lock
+  // again after returning. This also exercises the content ResizeObserver.
+  await page.setViewportSize({ width: 667, height: 375 });
+  await viewportEvent(page, { width: 667, height: 375, offsetTop: 0 });
+  await verifyContentMode(page, false);
+  await verifyContentSwipe(page);
+  await page.setViewportSize({ width: 375, height: 667 });
+  verifyBounds(await viewportEvent(page, { width: 375, height: 647, offsetTop: 20 }), 647, gap, "Short content after rotation");
+  await verifyContentMode(page, true);
+  for (const x of [150, 373]) {
+    for (const reverse of [false, true]) await swipeContent(page, { x, reverse });
+  }
+  assert.equal(await page.locator(".app-main").evaluate((main) => main.scrollTop), 0);
+  verifyBounds(await page.evaluate(() => window.measureTestShell()), 647, gap, "Short content after central and right-edge drags");
+  await page.locator("#directories-content").evaluate((content) => { content.style.removeProperty("min-height"); });
+  await page.locator(".directory-choice").first().tap();
+  await page.locator("#directories-back").tap();
+  await verifyContentMode(page, true);
 }
 
 try {
@@ -143,8 +218,13 @@ try {
         verifyBounds(await viewportEvent(page, { height: 647, offsetTop }, "scroll"), 647, gap, `${interfaceName} ${view} offset ${offsetTop}`);
       }
     }
+    await verifyShortContent(page, gap);
     await page.locator("#settings-button").tap();
     await page.waitForTimeout(250);
+    await verifyContentMode(page, false);
+    for (const [top, deltaY, blocked] of [[0, 40, true], [0, -40, false], [120, 40, false], [120, -40, false], ["bottom", -40, true], ["bottom", 40, false]]) {
+      assert.equal(await contentGesture(page, { top, deltaY }), blocked, `Long content: position ${top}, movement ${deltaY}`);
+    }
     await verifyContentSwipe(page);
     const scrollBefore = await page.evaluate(() => {
       const main = document.querySelector(".app-main");
@@ -175,7 +255,7 @@ try {
     const restored = await viewportEvent(page, { height: 647, offsetTop: 20 });
     assert.equal(restored.keyboard, false);
     verifyBounds(restored, 647, gap, `${interfaceName} keyboard close`);
-    console.log(`PASS ${interfaceName}: rotation, four screens, panel drag guard, touch taps and content swipe, intermediate offsets, preserved inner scroll, resume, keyboard`);
+    console.log(`PASS ${interfaceName}: rotation, four screens, panel drag guard, short content and edges locked, long content swipe, touch taps, intermediate offsets, preserved inner scroll, resume, keyboard`);
   }
   await context.close();
   for (const [label, userAgent, standalone] of [["iOS browser", iosAgent, false], ["Android PWA", "Mozilla/5.0 (Linux; Android 13) Chrome/120 Mobile Safari/537.36", true]]) {
@@ -189,6 +269,9 @@ try {
     assert.equal(state.shell.height, 667, label);
     assert.equal(state.shell.top, 0, label);
     await verifyPanelGestures(page, false);
+    await page.locator('[data-view="directories"]').tap();
+    await verifyContentMode(page, true, false);
+    assert.equal(await contentGesture(page), false, label);
     await context.close();
     console.log(`PASS ${label}: normal shell sizing retained`);
   }

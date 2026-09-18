@@ -11,7 +11,7 @@ import { DAY_PARTS, FOOD_RELATIONS, buildDaySchedule, formatMedicationExpiration
 import { DEFAULT_GLASS_BLUR_INTENSITY, DEFAULT_GLASS_EFFECTS, DEFAULT_GLASS_TRANSPARENCY, DEFAULT_THEME, MAX_GLASS_BLUR_INTENSITY, MAX_GLASS_TRANSPARENCY, MIN_GLASS_BLUR_INTENSITY, MIN_GLASS_TRANSPARENCY, applyGlassBlurIntensity, applyGlassTransparency, applyTheme, applyUiSettings, detectInitialInterface, initializeTheme, initializeUiSettings, saveTheme, saveUiSettings } from "./interface-settings.js";
 import { createAppInfoLoader, createChangeLoader } from "./app-info.js";
 import { createLayoutDiagnostics } from "./layout-diagnostics.js";
-import { bindPanelDragGuard, syncVisualViewport } from "./viewport.js";
+import { bindContentScrollGuard, bindPanelDragGuard, syncVisualViewport } from "./viewport.js";
 
 const PAGE_SIZE = 60;
 const BIRTHDAY_EMOJIS = Object.freeze(["🎉", "🥳", "🎂", "🎊", "🎈", "🎁", "🍰"]);
@@ -1680,6 +1680,7 @@ function bindEvents() {
   bindLayoutDiagnostics();
   syncVisualViewport();
   bindPanelDragGuard();
+  bindContentScrollGuard();
   scheduleSafeTopSync();
   pageScrollContainer()?.addEventListener("scroll", () => {
     if (document.documentElement.classList.contains("modal-open")) scheduleModalBackgroundScrollRestore();
