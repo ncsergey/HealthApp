@@ -797,11 +797,11 @@ test("обе оболочки используют панели 72 px и фик�
 test("safe-area обеих ориентаций применяется только после стабильного измерения", () => {
   const app = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
   assert.match(app, /handleVisualViewportChange = debounce\(\(\) => \{[\s\S]+syncVisualViewport\(\);[\s\S]+syncEntryKeyboardState\(\)[\s\S]+scheduleFocusedEntryFieldVisibility\(\)[\s\S]+\}, 80\)/);
-  assert.match(app, /LEGACY_PORTRAIT_SAFE_TOP_KEY = "myhealth:portrait-safe-top:v1"/);
-  assert.match(app, /SAFE_TOP_KEYS = Object\.freeze\(\{ portrait: "myhealth:safe-top:portrait:v2", landscape: "myhealth:safe-top:landscape:v2" \}\)/);
+  assert.match(app, /LEGACY_SAFE_TOP_KEYS = Object\.freeze\(\["myhealth:portrait-safe-top:v1", "myhealth:safe-top:portrait:v2", "myhealth:safe-top:landscape:v2"\]\)/);
+  assert.match(app, /SAFE_TOP_KEYS = Object\.freeze\(\{ portrait: "myhealth:safe-top:portrait:v3", landscape: "myhealth:safe-top:landscape:v3" \}\)/);
   assert.match(app, /function measureSafeTop\(\)[\s\S]+padding-top:env\(safe-area-inset-top,0px\)[\s\S]+getComputedStyle\(probe\)\.paddingTop/);
-  assert.match(app, /function restoreSafeTop\(orientation\)[\s\S]+removeItem\(LEGACY_PORTRAIT_SAFE_TOP_KEY\)[\s\S]+SAFE_TOP_KEYS\[orientation\]/);
-  assert.match(app, /function sampleSafeTop\(orientation, revision, delay\)[\s\S]+safeTopCandidateCount < 3 \|\| delay < 360[\s\S]+confirmSafeTop\(orientation, measured, revision\)/);
+  assert.match(app, /function restoreSafeTop\(orientation\)[\s\S]+for \(const key of LEGACY_SAFE_TOP_KEYS\) sessionStorage\.removeItem\(key\)[\s\S]+SAFE_TOP_KEYS\[orientation\]/);
+  assert.match(app, /function sampleSafeTop\(orientation, revision, delay\)[\s\S]+safeTopCandidateCount < 3 \|\| delay < 360[\s\S]+orientation === "portrait" && confirmedSafeTop\.portrait > \.5 && measured < \.5[\s\S]+confirmSafeTop\(orientation, measured, revision\)/);
   assert.doesNotMatch(app, /measured >= confirmedSafeTop/);
   assert.match(app, /function scheduleSafeTopSync\(\)[\s\S]+restoreSafeTop\(orientation\)[\s\S]+applySafeTop\(cached\)[\s\S]+\[0, 60, 180, 360, 720, 1200, 1600\]/);
   assert.match(app, /handleOrientationChange = \(\) => \{[\s\S]+classList\.contains\("modal-open"\) \? modalScrollY : currentPageScrollTop\(\)[\s\S]+scheduleSafeTopSync\(\);[\s\S]+scheduleShellLayoutSync\(scrollTop\);[\s\S]+\}/);
@@ -817,6 +817,9 @@ test("основная оболочка не зависит от visual viewport
   assert.match(app, /function scheduleShellLayoutSync\(scrollTop = null\)[\s\S]+pendingShellScrollTop = scrollTop[\s\S]+requestAnimationFrame\(\(\) => \{[\s\S]+requestAnimationFrame\(apply\)[\s\S]+pendingShellScrollTop = null[\s\S]+\}, 160\)/);
   assert.match(app, /saved\.interface !== previousInterface\) scheduleShellLayoutSync\(scrollTop\)/);
   assert.match(app, /classList\.toggle\("entry-keyboard-active", keyboardOpen\)[\s\S]+--entry-keyboard-shell-width[\s\S]+--entry-keyboard-shell-height/);
+  assert.match(app, /function entryKeyboardViewportStillReduced\(\)[\s\S]+baselineHeight - viewportHeight >= Math\.max\(ENTRY_KEYBOARD_MIN_REDUCTION, baselineHeight \* \.18\)/);
+  assert.match(app, /function scheduleKeyboardBackgroundRestore\(\)[\s\S]+\[80, 180, 360\][\s\S]+restorePageScroll\(modalScrollY\)/);
+  assert.match(app, /function clearEntryKeyboardState[\s\S]+entryKeyboardViewportStillReduced\(\)[\s\S]+scheduleKeyboardBackgroundRestore\(\)[\s\S]+setTimeout\(releaseEntryKeyboardShell, 600\)/);
   assert.match(css, /html\.entry-keyboard-active \.app-shell \{[^}]+right: auto[^}]+bottom: auto[^}]+width: var\(--entry-keyboard-shell-width, 100%\)[^}]+height: var\(--entry-keyboard-shell-height, 100%\)/);
   assert.doesNotMatch(app, /scheduleShellLayoutSync[\s\S]{0,600}window\.scrollTo/);
 });

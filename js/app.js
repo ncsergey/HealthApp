@@ -15,8 +15,8 @@ const PAGE_SIZE = 60;
 const BIRTHDAY_EMOJIS = Object.freeze(["🎉", "🥳", "🎂", "🎊", "🎈", "🎁", "🍰"]);
 const BACKUP_PENDING_KEY = "myhealth:backup-pending:v2";
 const BACKUP_REMINDER_DISMISSED_KEY = "myhealth:backup-reminder-dismissed:v1";
-const LEGACY_PORTRAIT_SAFE_TOP_KEY = "myhealth:portrait-safe-top:v1";
-const SAFE_TOP_KEYS = Object.freeze({ portrait: "myhealth:safe-top:portrait:v2", landscape: "myhealth:safe-top:landscape:v2" });
+const LEGACY_SAFE_TOP_KEYS = Object.freeze(["myhealth:portrait-safe-top:v1", "myhealth:safe-top:portrait:v2", "myhealth:safe-top:landscape:v2"]);
+const SAFE_TOP_KEYS = Object.freeze({ portrait: "myhealth:safe-top:portrait:v3", landscape: "myhealth:safe-top:landscape:v3" });
 const GLUCOSE_CONTEXT = Object.freeze({ fasting: "Натощак", beforeMeal: "Перед едой", after1h: "Через 1 час после начала еды", after2h: "Через 2 часа после начала еды", random: "Случайное измерение" });
 const GLUCOSE_FORMAT = Object.freeze({ plasma: "Эквивалент плазмы", wholeBlood: "Цельная кровь" });
 const PULSE_CONTEXT = Object.freeze({ resting: "В покое", active: "После физической нагрузки", unknown: "Контекст не указан" });
@@ -44,6 +44,8 @@ let pageScrollRestoreId = 0;
 let entryKeyboardSession = null;
 let focusedEntryScrollFrame = 0;
 let focusedEntryScrollTimer = 0;
+let keyboardShellReleaseTimer = 0;
+let keyboardBackgroundRestoreTimers = [];
 let shellLayoutSyncFrame = 0;
 let shellLayoutSyncTimer = 0;
 let shellLayoutSyncRevision = 0;
@@ -320,7 +322,7 @@ function measureSafeTop() {
 function restoreSafeTop(orientation) {
   if (confirmedSafeTop[orientation] !== null) return confirmedSafeTop[orientation];
   try {
-    sessionStorage.removeItem(LEGACY_PORTRAIT_SAFE_TOP_KEY);
+    for (const key of LEGACY_SAFE_TOP_KEYS) sessionStorage.removeItem(key);
     const cached = Number.parseFloat(sessionStorage.getItem(SAFE_TOP_KEYS[orientation]));
     if (Number.isFinite(cached) && cached >= 0 && cached <= 80) confirmedSafeTop[orientation] = cached;
   } catch { /* session storage unavailable */ }
@@ -345,6 +347,7 @@ function sampleSafeTop(orientation, revision, delay) {
   if (safeTopCandidate !== null && Math.abs(measured - safeTopCandidate) <= .5) safeTopCandidateCount += 1;
   else { safeTopCandidate = measured; safeTopCandidateCount = 1; }
   if (safeTopCandidateCount < 3 || delay < 360) return;
+  if (orientation === "portrait" && confirmedSafeTop.portrait > .5 && measured < .5) return;
   confirmSafeTop(orientation, measured, revision);
 }
 
@@ -424,6 +427,31 @@ function isMobileEntryViewport() {
   return mobileInput && Math.min(screen.width, screen.height) <= 720;
 }
 
+function releaseEntryKeyboardShell() {
+  clearTimeout(keyboardShellReleaseTimer);
+  keyboardShellReleaseTimer = 0;
+  for (const timer of keyboardBackgroundRestoreTimers) clearTimeout(timer);
+  keyboardBackgroundRestoreTimers = [];
+  document.documentElement.classList.remove("entry-keyboard-active");
+  document.documentElement.style.removeProperty("--entry-keyboard-shell-width");
+  document.documentElement.style.removeProperty("--entry-keyboard-shell-height");
+  if (!document.documentElement.classList.contains("modal-open")) restorePageScroll(modalScrollY);
+}
+
+function scheduleKeyboardBackgroundRestore() {
+  for (const timer of keyboardBackgroundRestoreTimers) clearTimeout(timer);
+  keyboardBackgroundRestoreTimers = [80, 180, 360].map((delay) => setTimeout(() => {
+    if (document.documentElement.classList.contains("entry-keyboard-active") && !document.documentElement.classList.contains("modal-open")) restorePageScroll(modalScrollY);
+  }, delay));
+}
+
+function entryKeyboardViewportStillReduced() {
+  const baselineHeight = Number.parseFloat(document.documentElement.style.getPropertyValue("--entry-keyboard-shell-height"));
+  const viewportHeight = window.visualViewport?.height;
+  if (!Number.isFinite(baselineHeight) || !Number.isFinite(viewportHeight)) return false;
+  return baselineHeight - viewportHeight >= Math.max(ENTRY_KEYBOARD_MIN_REDUCTION, baselineHeight * .18);
+}
+
 function clearEntryKeyboardState(dialog = entryKeyboardSession?.dialog) {
   if (dialog) {
     dialog.classList.remove("entry-keyboard-open");
@@ -432,9 +460,11 @@ function clearEntryKeyboardState(dialog = entryKeyboardSession?.dialog) {
   }
   if (!dialog || entryKeyboardSession?.dialog === dialog) {
     entryKeyboardSession = null;
-    document.documentElement.classList.remove("entry-keyboard-active");
-    document.documentElement.style.removeProperty("--entry-keyboard-shell-width");
-    document.documentElement.style.removeProperty("--entry-keyboard-shell-height");
+    if (document.documentElement.classList.contains("entry-keyboard-active") && entryKeyboardViewportStillReduced()) {
+      clearTimeout(keyboardShellReleaseTimer);
+      scheduleKeyboardBackgroundRestore();
+      keyboardShellReleaseTimer = setTimeout(releaseEntryKeyboardShell, 600);
+    } else releaseEntryKeyboardShell();
   }
 }
 
@@ -475,8 +505,7 @@ function syncEntryKeyboardState() {
   } else {
     context.dialog.style.removeProperty("--entry-keyboard-viewport-height");
     context.dialog.style.removeProperty("--entry-keyboard-offset-top");
-    document.documentElement.style.removeProperty("--entry-keyboard-shell-width");
-    document.documentElement.style.removeProperty("--entry-keyboard-shell-height");
+    releaseEntryKeyboardShell();
   }
   return keyboardOpen;
 }

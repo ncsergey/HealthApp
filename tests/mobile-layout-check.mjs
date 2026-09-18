@@ -12,8 +12,8 @@ const browserCandidates = [
   "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe"
 ];
 const devices = [
-  { name: "iPhone 8", portrait: [375, 667], dpr: 2, userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1" },
-  { name: "iPhone 13", portrait: [390, 844], dpr: 3, userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1" },
+  { name: "iPhone 8", portrait: [375, 667], dpr: 2, safeTop: 20, userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1" },
+  { name: "iPhone 13", portrait: [390, 844], dpr: 3, safeTop: 47, userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1" },
   { name: "Redmi Note 11 4G", portrait: [393, 873], dpr: 2.75, userAgent: "Mozilla/5.0 (Linux; Android 13; 2201117TG) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36" }
 ];
 const mimeTypes = new Map([
@@ -372,13 +372,14 @@ async function verifyKeyboardOrientationFlow(page, device) {
 
   await page.locator("#weight-dialog .dialog-actions .secondary-button").click();
   await page.waitForFunction(() => !document.querySelector("#weight-dialog").open);
-  await page.waitForTimeout(200);
+  await page.waitForTimeout(260);
   assert(!await page.locator("#weight-dialog").evaluate((dialog) => dialog.classList.contains("entry-keyboard-open")), `${device.name}: состояние клавиатуры осталось после закрытия формы`);
-  assert(!await page.evaluate(() => document.documentElement.classList.contains("entry-keyboard-active")), `${device.name}: фиксация оболочки осталась после закрытия формы`);
-  const restoredBackground = await page.locator(".app-main").evaluate((node) => ({ scrollTop: node.scrollTop, scrollMax: node.scrollHeight - node.clientHeight }));
-  assert(restoredBackground.scrollTop === Math.min(backgroundScroll, restoredBackground.scrollMax), `${device.name}: фон прокрутился при закрытии формы с клавиатурой (${backgroundScroll} → ${restoredBackground.scrollTop}, max ${restoredBackground.scrollMax})`);
+  assert(await page.evaluate(() => document.documentElement.classList.contains("entry-keyboard-active")), `${device.name}: оболочка разморожена до закрытия клавиатуры`);
   await page.setViewportSize({ width: portraitWidth, height: portraitHeight });
-  await settle(page);
+  await page.waitForFunction(() => !document.documentElement.classList.contains("entry-keyboard-active"));
+  await page.waitForTimeout(180);
+  const finalBackgroundScroll = await page.locator(".app-main").evaluate((node) => node.scrollTop);
+  assert(finalBackgroundScroll === backgroundScroll, `${device.name}: фон не восстановился после закрытия клавиатуры (${backgroundScroll} → ${finalBackgroundScroll})`);
 }
 
 async function verifyRotationRoundTrip(page, device) {
@@ -419,6 +420,7 @@ async function verifyRotationRoundTrip(page, device) {
   });
 
   const baseline = await rotationState();
+  if (device.safeTop) assert(closeEnough(baseline.safeTop, device.safeTop), `${device.name}: портретный safe-area не восстановлен перед проверкой (${baseline.safeTop})`);
   for (let cycle = 1; cycle <= 3; cycle += 1) {
     await page.setViewportSize({ width: portraitHeight, height: portraitWidth });
     await page.waitForTimeout(300);
@@ -467,6 +469,9 @@ async function main() {
         userAgent: device.userAgent,
         colorScheme: "light"
       });
+      if (device.safeTop) await context.addInitScript((safeTop) => {
+        try { sessionStorage.setItem("myhealth:safe-top:portrait:v3", String(safeTop)); } catch { /* session storage unavailable */ }
+      }, device.safeTop);
       const page = await context.newPage();
       await page.goto(`http://127.0.0.1:${address.port}/`, { waitUntil: "networkidle" });
       await page.locator("#settings-button").click();
