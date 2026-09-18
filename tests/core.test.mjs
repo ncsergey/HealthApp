@@ -735,7 +735,7 @@ test("в современном интерфейсе шапка и нижнее 
   const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
   assert.match(css, /--floating-chrome-gap: 12px/);
-  assert.match(css, /--floating-chrome-height: 71px/);
+  assert.match(css, /--floating-chrome-height: 72px/);
   assert.match(html, /<div class="app-shell">\s+<div class="top-chrome-anchor">\s+<header class="app-header">/);
   assert.match(html, /<main id="app" class="app-main">\s+<div class="app-content">/);
   assert.match(html, /<div class="bottom-chrome-anchor">\s+<nav class="bottom-nav"[\s\S]+<\/nav>\s+<\/div>\s+<\/div>\s+<dialog/);
@@ -759,6 +759,21 @@ test("в классическом интерфейсе сетка нижнего
   const inset = "max(24px, calc((100vw - 1120px) / 2))";
   assert.match(desktop, new RegExp(`\\.app-header \\{[\\s\\S]+padding-right: ${inset.replace(/[()]/g, "\\$&")};[\\s\\S]+padding-left: ${inset.replace(/[()]/g, "\\$&")};`));
   assert.match(desktop, new RegExp(`html\\[data-interface="classic"\\] \\.bottom-nav \\{[\\s\\S]+padding-right: ${inset.replace(/[()]/g, "\\$&")};[\\s\\S]+padding-left: ${inset.replace(/[()]/g, "\\$&")};`));
+});
+
+test("обе оболочки используют панели 72 px и фиксированные элементы шапки 52 px", () => {
+  const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
+  assert.match(css, /\.app-header \{[\s\S]+height: 72px; padding: 10px[^;]+ 9px/);
+  assert.match(css, /\.brand-icon-container \{[^}]+width: 52px[^}]+max-width: 52px[^}]+height: 52px[^}]+max-height: 52px/);
+  assert.match(css, /\.brand-icon, \.brand-emoji \{[^}]+width: 52px[^}]+height: 52px/);
+  assert.match(css, /\.icon-button \{[^}]+width: 52px[^}]+max-width: 52px[^}]+height: 52px[^}]+max-height: 52px[^}]+-webkit-appearance: none/);
+  assert.match(css, /\.bottom-nav \{[^}]+height: 72px; padding: 9px[^;]+ 10px/);
+  assert.match(css, /\.bottom-nav button \{[^}]+height: 52px[^}]+min-height: 52px/);
+  assert.match(css, /html\[data-interface="modern"\] \.app-header \{[\s\S]+height: var\(--floating-chrome-height\)[\s\S]+padding: 9px 12px/);
+  assert.match(css, /html\[data-interface="modern"\] \.bottom-nav \{[\s\S]+height: var\(--floating-chrome-height\)[\s\S]+padding: 7px/);
+  assert.match(css, /html\[data-interface="modern"\] \.bottom-nav button \{[^}]+height: 56px[^}]+min-height: 56px/);
+  assert.doesNotMatch(css, /\.brand-icon-container, \.brand-icon, \.brand-emoji \{[^}]+(?:width|height): 32px/);
+  assert.doesNotMatch(css, /\.bottom-nav button \{ height: auto; min-height: 0/);
 });
 
 test("портретный safe-area оболочки сохраняется только после подтверждения", () => {
@@ -1072,7 +1087,8 @@ test("раздел «О программе» встроен в навигаци�
   assert.doesNotMatch(html, /data-settings-target="about"|about-brand-card/);
   assert.equal((html.match(/data-about-target=/g) || []).length, 3);
   for (const heading of ["Дневник", "Статистика", "Лекарства", "Справочники", "Настройки", "Общие возможности"]) assert.match(html, new RegExp(`<h3[^>]*>${heading}</h3>`));
-  for (const subheading of ["Аккаунт", "Интерфейс", "Резервная копия"]) assert.match(html, new RegExp(`<h4>${subheading}</h4>`));
+  assert.doesNotMatch(html, /feature-subsection|<h4>(?:Аккаунт|Интерфейс|Резервная копия)<\/h4>/);
+  assert.match(html, /id="features-settings">Настройки<\/h3>\s*<ul>[\s\S]+Личный профиль[\s\S]+Классический и современный интерфейсы[\s\S]+Экспорт данных в CSV[\s\S]+<\/ul>/);
   assert.doesNotMatch(readme, /^## Сборка$/m);
   assert.match(app, /const SETTINGS_CHILD_VIEWS = new Set\(\["profile", "interface", "backup"\]\)/);
   assert.match(app, /const ABOUT_CHILD_VIEWS = new Set\(\["changes", "description", "features"\]\)/);
