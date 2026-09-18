@@ -5,6 +5,19 @@ function isIosStandalone(win) {
   return ios && (navigator.standalone === true || win.matchMedia?.("(display-mode: standalone)").matches === true);
 }
 
+export function bindPanelDragGuard(win = window) {
+  if (!isIosStandalone(win)) return;
+  const preventDrag = (event) => {
+    if (event.cancelable) event.preventDefault();
+  };
+  // Touchmove remains targeted at the element where the gesture began.
+  // Cancel only moves originating on the panels; taps and content scrolling
+  // keep their native handling. The listener backs up touch-action in iOS.
+  for (const selector of [".app-header", ".bottom-nav"]) {
+    win.document.querySelector(selector)?.addEventListener("touchmove", preventDrag, { passive: false });
+  }
+}
+
 export function syncVisualViewport(win = window) {
   const viewport = win.visualViewport;
   // Keep the last valid geometry while an inactive web view reports zero sizes.

@@ -82,6 +82,49 @@ async function viewportEvent(page, values, event = "resize") {
   }, { values, event });
 }
 
+async function verifyPanelGestures(page, enabled) {
+  const result = await page.evaluate(() => {
+    const touchActions = [".app-header", ".bottom-nav", ".app-main"].map((selector) => getComputedStyle(document.querySelector(selector)).touchAction);
+    const events = [];
+    // Child targets exercise bubbling to the panels. A content gesture keeps
+    // its original target even when the finger moves over the header.
+    for (const selector of ["#settings-button", ".bottom-nav .nav-label", ".app-main"]) {
+      const target = document.querySelector(selector);
+      for (const type of ["touchstart", "touchmove", "touchend"]) {
+        const touch = new Touch({ identifier: 1, target, clientX: 100, clientY: type === "touchstart" ? 400 : 30 });
+        const touches = type === "touchend" ? [] : [touch];
+        const event = new TouchEvent(type, { bubbles: true, cancelable: true, touches, targetTouches: touches, changedTouches: [touch] });
+        target.dispatchEvent(event);
+        events.push({ selector, type, prevented: event.defaultPrevented });
+      }
+    }
+    return { touchActions, events };
+  });
+  assert.deepEqual(result.touchActions, [enabled ? "none" : "auto", enabled ? "none" : "auto", "auto"]);
+  for (const { selector, type, prevented } of result.events) {
+    assert.equal(prevented, enabled && selector !== ".app-main" && type === "touchmove", `${selector} ${type}`);
+  }
+}
+
+async function verifyContentSwipe(page) {
+  await page.locator(".app-main").evaluate((main) => { main.scrollTop = 0; });
+  assert.equal(await page.evaluate(() => Boolean(document.elementFromPoint(16, 450)?.closest(".app-main"))), true);
+  const session = await page.context().newCDPSession(page);
+  try {
+    await session.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: 16, y: 450 }] });
+    for (let step = 1; step <= 10; step++) {
+      await session.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: 16, y: 450 - step * 20 }] });
+      await page.waitForTimeout(20);
+    }
+    // Hold before release so momentum cannot affect the following checks.
+    await page.waitForTimeout(300);
+    await session.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    assert.ok(await page.locator(".app-main").evaluate((main) => main.scrollTop > 50), "Content must still scroll with a native touch gesture");
+  } finally {
+    await session.detach();
+  }
+}
+
 try {
   browser = await chromium.launch({ ...(executablePath ? { executablePath } : {}), headless: true });
   const { context, page } = await createPage();
@@ -92,14 +135,17 @@ try {
       await page.setViewportSize({ width, height: layoutHeight });
       verifyBounds(await viewportEvent(page, { width, height, offsetTop }), height, gap, `${interfaceName} rotation`);
     }
+    await verifyPanelGestures(page, true);
     for (const view of ["diary", "stats", "medications", "directories"]) {
-      await page.locator(`[data-view="${view}"]`).click();
+      await page.locator(`[data-view="${view}"]`).tap();
+      await page.waitForFunction((view) => document.querySelector(`[data-view="${view}"]`).classList.contains("active"), view);
       for (const offsetTop of [20, 9, 0, 8, 20, 14, 0]) {
         verifyBounds(await viewportEvent(page, { height: 647, offsetTop }, "scroll"), 647, gap, `${interfaceName} ${view} offset ${offsetTop}`);
       }
     }
-    await page.locator("#settings-button").click();
+    await page.locator("#settings-button").tap();
     await page.waitForTimeout(250);
+    await verifyContentSwipe(page);
     const scrollBefore = await page.evaluate(() => {
       const main = document.querySelector(".app-main");
       main.scrollTop = 120;
@@ -129,7 +175,7 @@ try {
     const restored = await viewportEvent(page, { height: 647, offsetTop: 20 });
     assert.equal(restored.keyboard, false);
     verifyBounds(restored, 647, gap, `${interfaceName} keyboard close`);
-    console.log(`PASS ${interfaceName}: rotation, four screens, intermediate offsets, preserved inner scroll, resume, keyboard`);
+    console.log(`PASS ${interfaceName}: rotation, four screens, panel drag guard, touch taps and content swipe, intermediate offsets, preserved inner scroll, resume, keyboard`);
   }
   await context.close();
   for (const [label, userAgent, standalone] of [["iOS browser", iosAgent, false], ["Android PWA", "Mozilla/5.0 (Linux; Android 13) Chrome/120 Mobile Safari/537.36", true]]) {
@@ -142,6 +188,7 @@ try {
     assert.equal(state.enabled, false, label);
     assert.equal(state.shell.height, 667, label);
     assert.equal(state.shell.top, 0, label);
+    await verifyPanelGestures(page, false);
     await context.close();
     console.log(`PASS ${label}: normal shell sizing retained`);
   }

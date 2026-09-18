@@ -97,6 +97,9 @@ html.ios-standalone-viewport .app-shell {
   bottom: auto;
   height: var(--visual-viewport-height);
 }
+html.ios-standalone-viewport :is(.app-header, .bottom-nav) {
+  touch-action: none;
+}
 html.entry-keyboard-active .app-shell {
   right: auto;
   bottom: auto;

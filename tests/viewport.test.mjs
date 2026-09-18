@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { syncVisualViewport } from "../js/viewport.js";
+import { bindPanelDragGuard, syncVisualViewport } from "../js/viewport.js";
 
 function fixture(navigator = { userAgent: "iPhone OS 16_7_16", platform: "iPhone", standalone: true }) {
   const properties = new Map();
@@ -80,4 +80,27 @@ test("viewport updates leave keyboard freezing and safe-area state to their exis
   assert.equal(properties.get("--entry-keyboard-shell-height"), "647px");
   assert.equal(properties.get("--shell-safe-top"), "0px");
   assert.ok(classes.has("entry-keyboard-active"));
+});
+
+test("panel drag guard cancels moves but leaves taps and the content scroller alone", () => {
+  const { win } = fixture();
+  const nodes = Object.fromEntries([".app-header", ".bottom-nav", ".app-main"].map((selector) => [selector, new EventTarget()]));
+  win.document.querySelector = (selector) => nodes[selector];
+  bindPanelDragGuard(win);
+  for (const [selector, target] of Object.entries(nodes)) {
+    for (const type of ["touchstart", "touchmove", "touchend", "click"]) {
+      const event = new Event(type, { cancelable: true });
+      target.dispatchEvent(event);
+      assert.equal(event.defaultPrevented, type === "touchmove" && selector !== ".app-main", `${selector}: ${type}`);
+    }
+  }
+  assert.doesNotThrow(() => nodes[".app-header"].dispatchEvent(new Event("touchmove", { cancelable: false })));
+});
+
+test("panel gesture interception is restricted to installed iOS apps", () => {
+  for (const navigator of [{ userAgent: "iPhone", standalone: false }, { userAgent: "Android", standalone: true }]) {
+    const { win } = fixture(navigator);
+    win.document.querySelector = () => assert.fail("Do not install panel touch listeners outside iOS PWA");
+    bindPanelDragGuard(win);
+  }
 });
