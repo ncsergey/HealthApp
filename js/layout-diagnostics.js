@@ -5,6 +5,11 @@ const SURFACES = {
   shell: ".app-shell", headerAnchor: ".top-chrome-anchor", header: ".app-header",
   main: ".app-main", content: ".app-content", footerAnchor: ".bottom-chrome-anchor", footer: ".bottom-nav"
 };
+const PROBE_HEIGHTS = {
+  fixedInset: "auto", vh: "100vh", svh: "100svh", dvh: "100dvh", fillAvailable: "-webkit-fill-available",
+  innerHeight: null, visualHeight: null, visualViewport: null
+};
+const PROBE_STYLE = "position:fixed;top:0;bottom:auto;left:0;right:auto;width:0;min-width:0;max-width:none;height:0;min-height:0;max-height:none;margin:0;border:0;padding:0;box-sizing:border-box;visibility:hidden;pointer-events:none;overflow:hidden;transform:none";
 
 const number = (value) => Number.isFinite(value) ? Math.round(value * 100) / 100 : null;
 
@@ -19,26 +24,92 @@ function scrollMetrics(element) {
   return Object.fromEntries(["scrollTop", "scrollLeft", "scrollHeight", "scrollWidth", "clientHeight", "clientWidth"].map((key) => [key, number(element[key])]));
 }
 
+function surfaceMetrics(win, element) {
+  if (!element) return null;
+  const style = win.getComputedStyle(element);
+  return {
+    rect: rectangle(element), ...scrollMetrics(element),
+    ...Object.fromEntries([
+      "position", "top", "bottom", "height", "minHeight", "maxHeight", "boxSizing",
+      "overflowX", "overflowY", "transform", "filter", "perspective", "contain", "willChange",
+      "paddingTop", "paddingBottom"
+    ].map((key) => [key, style[key] || null])),
+    overscrollY: style.overscrollBehaviorY || null
+  };
+}
+
+function createProbes(win) {
+  const doc = win.document;
+  const make = (name) => {
+    const element = doc.createElement("div");
+    element.setAttribute("aria-hidden", "true");
+    element.setAttribute("data-layout-diagnostic-probe", name);
+    element.style.cssText = PROBE_STYLE;
+    return element;
+  };
+  const safeArea = make("safeArea");
+  safeArea.style.cssText += ";box-sizing:content-box;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)";
+  const viewport = Object.fromEntries(Object.entries(PROBE_HEIGHTS).map(([name, height]) => {
+    const element = make(name);
+    const supported = height === null || typeof win.CSS?.supports !== "function" ? null : win.CSS.supports("height", height);
+    if (height !== null) element.style.height = height;
+    if (name === "fixedInset") element.style.bottom = "0px";
+    return [name, { element, supported }];
+  }));
+  // Empty, zero-width fixed siblings only: no app styles, viewport meta,
+  // scroll positions or input handling are changed by these measurements.
+  doc.body.append(safeArea, ...Object.values(viewport).map(({ element }) => element));
+  return { safeArea, viewport };
+}
+
+function measureViewportProbes(win, probes) {
+  const viewport = win.visualViewport;
+  const dynamic = {
+    innerHeight: { height: win.innerHeight, top: 0 },
+    visualHeight: { height: viewport?.height, top: 0 },
+    visualViewport: { height: viewport?.height, top: viewport?.offsetTop }
+  };
+  // Batch writes to the diagnostic elements before reading any rectangles.
+  // No fallback to innerHeight: unavailable viewport data must stay explicit.
+  for (const [name, values] of Object.entries(dynamic)) {
+    const { element } = probes.viewport[name];
+    const available = Number.isFinite(values.height) && values.height > 0 && Number.isFinite(values.top);
+    element.style.height = `${available ? values.height : 0}px`;
+    element.style.top = `${available ? values.top : 0}px`;
+  }
+  return Object.fromEntries(Object.entries(probes.viewport).map(([name, { element, supported }]) => {
+    const values = dynamic[name];
+    const available = values ? Number.isFinite(values.height) && values.height > 0 && Number.isFinite(values.top) : supported !== false;
+    return [name, {
+      supported, available, requestedHeight: element.style.height, requestedTop: element.style.top,
+      computedHeight: available ? win.getComputedStyle(element).height : null,
+      rect: available ? rectangle(element) : null
+    }];
+  }));
+}
+
+function probeImpactSnapshot(win) {
+  return {
+    windowScrollX: number(win.scrollX), windowScrollY: number(win.scrollY),
+    root: scrollMetrics(win.document.documentElement), body: scrollMetrics(win.document.body),
+    shell: rectangle(win.document.querySelector(".app-shell"))
+  };
+}
+
 // Only geometry and known UI attributes are read. Never read field values, text,
 // IndexedDB, or arbitrary storage: a report must not contain health records.
-function snapshot(win, probe) {
+function snapshot(win, probes) {
   const doc = win.document;
   const root = doc.documentElement;
+  const viewportProbes = measureViewportProbes(win, probes);
   const rootStyle = win.getComputedStyle(root);
   const viewport = win.visualViewport;
-  const safeStyle = win.getComputedStyle(probe);
+  const safeStyle = win.getComputedStyle(probes.safeArea);
   const layout = {};
   for (const [name, selector] of Object.entries(SURFACES)) {
     const element = doc.querySelector(selector);
     if (!element) continue;
-    const style = win.getComputedStyle(element);
-    layout[name] = {
-      rect: rectangle(element), ...scrollMetrics(element),
-      position: style.position, top: style.top, bottom: style.bottom,
-      overflowX: style.overflowX, overflowY: style.overflowY,
-      overscrollY: style.overscrollBehaviorY, transform: style.transform,
-      paddingTop: style.paddingTop, paddingBottom: style.paddingBottom
-    };
+    layout[name] = surfaceMetrics(win, element);
   }
   return {
     view: doc.querySelector("section.view:not([hidden])")?.id || null,
@@ -53,8 +124,10 @@ function snapshot(win, probe) {
     },
     screen: { width: number(win.screen.width), height: number(win.screen.height), availWidth: number(win.screen.availWidth), availHeight: number(win.screen.availHeight) },
     visualViewport: viewport ? Object.fromEntries(["width", "height", "offsetTop", "offsetLeft", "pageTop", "pageLeft", "scale"].map((key) => [key, number(viewport[key])])) : null,
+    viewportCss: Object.fromEntries(["height", "offset-top", "bottom"].map((key) => [key, rootStyle.getPropertyValue(`--visual-viewport-${key}`).trim()])),
+    viewportProbes,
     document: {
-      root: scrollMetrics(root), body: scrollMetrics(doc.body), scrollingElement: scrollMetrics(doc.scrollingElement),
+      root: surfaceMetrics(win, root), body: surfaceMetrics(win, doc.body), scrollingElement: scrollMetrics(doc.scrollingElement),
       scrollingElementTag: doc.scrollingElement?.tagName || null,
       htmlOverflow: rootStyle.overflow, bodyOverflow: win.getComputedStyle(doc.body).overflow,
       visibility: doc.visibilityState
@@ -88,7 +161,8 @@ export function createLayoutDiagnostics({ window: win = globalThis.window, getAp
   let startTime = 0;
   let lastSampleTime = -Infinity;
   let pendingTimer = null;
-  let probe = null;
+  let probes = null;
+  let probeImpact = null;
   let metadata = null;
   const pendingReasons = new Set();
   const timers = new Set();
@@ -105,7 +179,7 @@ export function createLayoutDiagnostics({ window: win = globalThis.window, getAp
     pendingReasons.clear();
     const now = win.performance.now();
     try {
-      const sample = { sequence: ++sequence, elapsedMs: number(now - startTime), reasons, ...snapshot(win, probe) };
+      const sample = { sequence: ++sequence, elapsedMs: number(now - startTime), reasons, ...snapshot(win, probes) };
       baseline ||= sample;
       if (samples.length < MAX_SAMPLES) samples.push(sample);
       else { samples[nextIndex] = sample; nextIndex = (nextIndex + 1) % MAX_SAMPLES; dropped += 1; }
@@ -146,8 +220,11 @@ export function createLayoutDiagnostics({ window: win = globalThis.window, getAp
     stoppedAt = new Date().toISOString();
     for (const dispose of cleanup.splice(0)) dispose();
     for (const group of [timers, rotationTimers]) { for (const timer of group) win.clearTimeout(timer); group.clear(); }
-    probe?.remove();
-    probe = null;
+    probeImpact.beforeRemoval = probeImpactSnapshot(win);
+    probes.safeArea.remove();
+    for (const { element } of Object.values(probes.viewport)) element.remove();
+    probes = null;
+    probeImpact.afterRemoval = probeImpactSnapshot(win);
     onStatusChange(status());
   }
 
@@ -163,12 +240,11 @@ export function createLayoutDiagnostics({ window: win = globalThis.window, getAp
       viewportMeta: doc.querySelector('meta[name="viewport"]')?.content || null,
       statusBarStyle: doc.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')?.content || null
     };
-    probe = doc.createElement("div");
-    probe.setAttribute("aria-hidden", "true");
-    probe.style.cssText = "position:fixed;top:0;left:0;width:0;height:0;margin:0;border:0;box-sizing:content-box;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)";
-    doc.body.append(probe);
+    probeImpact = { beforeInsertion: probeImpactSnapshot(win) };
+    probes = createProbes(win);
     recording = true;
     capture("start");
+    probeImpact.afterInsertion = probeImpactSnapshot(win);
     listen(win, "orientationchange", () => rotation("orientationchange"));
     listen(win.screen.orientation, "change", () => rotation("screen-orientation"));
     const orientation = win.matchMedia("(orientation: portrait)");
@@ -198,18 +274,19 @@ export function createLayoutDiagnostics({ window: win = globalThis.window, getAp
   function report() {
     const info = getAppInfo();
     return {
-      format: "myhealth-layout-diagnostics", schemaVersion: 1, exportedAt: new Date().toISOString(),
+      format: "myhealth-layout-diagnostics", schemaVersion: 2, exportedAt: new Date().toISOString(),
       app: { version: info?.version || null, buildDate: info?.buildDate || null },
       environment: metadata, ...status(),
       limits: { maxSamples: MAX_SAMPLES, eventSampleIntervalMs: SAMPLE_INTERVAL_MS, maxDurationMs: MAX_DURATION_MS },
       baseline,
+      probeImpact,
       samples: nextIndex ? [...samples.slice(nextIndex), ...samples.slice(0, nextIndex)] : samples.slice()
     };
   }
 
   function clear() {
     stop();
-    samples = []; baseline = null; metadata = null; nextIndex = 0; dropped = 0; errors = 0; startedAt = null; stoppedAt = null;
+    samples = []; baseline = null; metadata = null; probeImpact = null; nextIndex = 0; dropped = 0; errors = 0; startedAt = null; stoppedAt = null;
     onStatusChange(status());
   }
 

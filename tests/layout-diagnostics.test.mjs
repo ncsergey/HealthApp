@@ -26,13 +26,14 @@ function fixture() {
     tagName, style: { getPropertyValue: () => "0px" }, styles: { ...styles }, dataset: {}, classList: { contains: () => false },
     scrollTop: 0, scrollLeft: 0, scrollHeight: 1000, scrollWidth: 375, clientHeight: 647, clientWidth: 375,
     rect: { top: 0, right: 375, bottom: 647, left: 0, width: 375, height: 647 },
-    getBoundingClientRect() { return { ...this.rect }; }, setAttribute() {},
+    getBoundingClientRect() { return { ...this.rect }; }, attributes: {},
+    setAttribute(name, value) { this.attributes[name] = value; },
     scrollTo() { assert.fail("Diagnostics must not change scroll position"); }
   });
   const children = new Set();
   const root = surface("HTML");
   const body = surface("BODY");
-  body.append = (node) => { children.add(node); node.remove = () => children.delete(node); };
+  body.append = (...nodes) => { for (const node of nodes) { children.add(node); node.remove = () => children.delete(node); } };
   const nodes = Object.fromEntries([".app-shell", ".top-chrome-anchor", ".app-header", ".app-main", ".app-content", ".bottom-chrome-anchor", ".bottom-nav"].map((selector) => [selector, surface()]));
   const doc = {
     ...eventTarget(), documentElement: root, body, scrollingElement: root, visibilityState: "visible",
@@ -53,6 +54,7 @@ function fixture() {
     navigator: { userAgent: "test iPhone", platform: "iPhone", maxTouchPoints: 5, standalone: true },
     screen: { width: 375, height: 667, availWidth: 375, availHeight: 647, orientation: { ...eventTarget(), angle: 0, type: "portrait-primary" } },
     innerWidth: 375, innerHeight: 647, scrollX: 0, scrollY: 0, devicePixelRatio: 2,
+    CSS: { supports: () => true },
     visualViewport: { ...eventTarget(), width: 375, height: 647, offsetTop: 0, offsetLeft: 0, pageTop: 0, pageLeft: 0, scale: 1 },
     matchMedia: (query) => query === "(orientation: portrait)" ? orientation : { matches: true },
     getComputedStyle: (node) => node.styles,
@@ -85,7 +87,7 @@ test("diagnostics are opt-in and stop removes every listener, timer and probe", 
   assert.equal(win.listeners.size, 0);
   logger.start();
   logger.start();
-  assert.equal(children.size, 1);
+  assert.equal(children.size, 9);
   assert.equal(logger.status().count, 1);
   doc.dispatch("touchmove");
   logger.stop();
@@ -94,12 +96,71 @@ test("diagnostics are opt-in and stop removes every listener, timer and probe", 
   assert.equal(logger.status().count, count);
   assert.equal(timers.size, 0);
   assert.equal(children.size, 0);
+  const { probeImpact } = logger.report();
+  assert.deepEqual(probeImpact.beforeInsertion, probeImpact.afterInsertion);
+  assert.deepEqual(probeImpact.beforeRemoval, probeImpact.afterRemoval);
   for (const target of [win, doc, orientation, win.visualViewport, win.screen.orientation]) {
     for (const callbacks of target.listeners.values()) assert.equal(callbacks.size, 0);
   }
   logger.clear();
   assert.equal(logger.status().count, 0);
   assert.equal(logger.report().baseline, null);
+  assert.equal(logger.report().probeImpact, null);
+});
+
+test("viewport probes keep raw browser geometry separate from requested sizing and do not write app styles", () => {
+  const { logger, win, doc, nodes, children, advance } = fixture();
+  const appStyles = [doc.documentElement, doc.body, ...Object.values(nodes)].map((node) => node.style);
+  const beforeStyles = appStyles.map((style) => ({ ...style }));
+  logger.start();
+  const probes = Object.fromEntries([...children].map((element) => [element.attributes["data-layout-diagnostic-probe"], element]));
+  win.visualViewport.offsetTop = 20;
+  win.visualViewport.height = 647;
+  doc.documentElement.styles.height = "667px";
+  doc.documentElement.rect.height = 667;
+  // Browser responses are deliberately different from the requested lengths:
+  // logging must not report an assumed dvh fix or subtract the offset itself.
+  probes.dvh.styles.height = "667px";
+  probes.dvh.rect = { top: -20, bottom: 647, left: 0, right: 0, width: 0, height: 667 };
+  probes.visualHeight.rect = { top: -20, bottom: 627, left: 0, right: 0, width: 0, height: 647 };
+  probes.visualViewport.rect = { top: 0, bottom: 647, left: 0, right: 0, width: 0, height: 647 };
+  win.visualViewport.dispatch("resize");
+  advance(100);
+  const report = logger.report();
+  const sample = report.samples.at(-1);
+  assert.equal(report.schemaVersion, 2);
+  assert.equal(sample.viewportProbes.dvh.requestedHeight, "100dvh");
+  assert.equal(sample.viewportProbes.dvh.computedHeight, "667px");
+  assert.equal(sample.viewportProbes.dvh.rect.height, 667);
+  assert.equal(sample.viewportProbes.visualHeight.requestedHeight, "647px");
+  assert.equal(sample.viewportProbes.visualHeight.requestedTop, "0px");
+  assert.equal(sample.viewportProbes.visualHeight.rect.top, -20);
+  assert.equal(sample.viewportProbes.visualViewport.requestedTop, "20px");
+  assert.equal(sample.viewportProbes.visualViewport.rect.top, 0);
+  assert.equal(sample.document.root.height, "667px");
+  assert.equal(sample.document.root.rect.height, 667);
+  assert.equal(report.baseline.viewportProbes.visualViewport.requestedTop, "0px");
+  logger.stop();
+  assert.deepEqual(appStyles, beforeStyles);
+  assert.equal(children.size, 0);
+  assert.equal(report.errors, 0);
+});
+
+test("unsupported CSS lengths and a missing visual viewport are reported as unavailable without a fallback", () => {
+  const { logger, win } = fixture();
+  win.CSS.supports = (_, value) => !["100dvh", "100svh", "-webkit-fill-available"].includes(value);
+  win.visualViewport = null;
+  logger.start();
+  const sample = logger.report().baseline;
+  for (const name of ["dvh", "svh", "fillAvailable", "visualHeight", "visualViewport"]) {
+    assert.equal(sample.viewportProbes[name].available, false);
+    assert.equal(sample.viewportProbes[name].rect, null);
+  }
+  assert.equal(sample.viewportProbes.dvh.supported, false);
+  assert.equal(sample.viewportProbes.innerHeight.requestedHeight, "647px");
+  assert.equal(sample.viewportProbes.innerHeight.available, true);
+  logger.stop();
+  assert.equal(logger.status().errors, 0);
 });
 
 test("rotation keeps the prior baseline and captures delayed viewport, safe-area and scroll changes without field values", () => {
