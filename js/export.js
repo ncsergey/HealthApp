@@ -24,6 +24,15 @@ async function shareFiles(files, title) {
   }
 }
 
+export async function exportLayoutDiagnostics(report) {
+  const timestamp = report.exportedAt.replace(/[:.]/g, "-");
+  const file = new File([JSON.stringify(report, null, 2)], `myhealth-layout-${timestamp}.json`, { type: "application/json" });
+  const result = await shareFiles([file], "Диагностика экрана MyHealth");
+  if (result === "cancelled") return false;
+  if (result !== "shared") downloadBlob(file, file.name);
+  return true;
+}
+
 export async function exportCsv(data) {
   const bodyPartNames = new Map((data.bodyParts || []).map((item) => [item.id, item.name]));
   const medicationNames = new Map((data.medications || []).map((item) => [item.id, item.name]));

@@ -77,6 +77,18 @@
         <button class="settings-card" type="button" data-settings-target="interface"><span class="settings-icon" aria-hidden="true">🎨</span><span class="settings-main"><strong>Интерфейс</strong><small>Смена оформления</small></span><span class="settings-chevron" aria-hidden="true">›</span></button>
         <button class="settings-card" type="button" data-settings-target="backup"><span class="settings-icon" aria-hidden="true">💾</span><span class="settings-main"><strong>Резервная копия</strong><small>Экспорт и импорт данных</small></span><span class="settings-chevron" aria-hidden="true">›</span></button>
       </div>
+      <section class="theme-settings-card layout-diagnostics" aria-labelledby="layout-diagnostics-heading">
+        <h3 id="layout-diagnostics-heading">Диагностика экрана</h3>
+        <p class="muted">Начните запись, откройте нужный экран, поверните телефон и прокрутите содержимое. Затем вернитесь сюда и сохраните журнал.</p>
+        <p class="muted">Только размеры и положение элементов, без записей здоровья. Журнал хранится до закрытия или обновления приложения. Запись остановится через 10 минут; при заполнении останутся последние замеры и начальный снимок.</p>
+        <p id="layout-diagnostics-status" role="status">Запись выключена.</p>
+        <div class="stack-actions">
+          <button id="layout-diagnostics-toggle" class="primary-button" type="button">Начать запись</button>
+          <button id="layout-diagnostics-export" class="secondary-button" type="button" disabled>Сохранить журнал</button>
+          <button id="layout-diagnostics-clear" class="secondary-button" type="button" disabled>Удалить журнал</button>
+        </div>
+        <p id="layout-diagnostics-error" class="form-error" role="alert"></p>
+      </section>
     </section>
     <section id="about-view" class="view" aria-labelledby="about-heading" hidden>
       <div class="section-heading"><div><p class="eyebrow">Информация о приложении</p><h2 id="about-heading">О программе</h2></div></div>

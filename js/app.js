@@ -1,7 +1,7 @@
 import { STORES, countImportConflicts, deleteMedicationCourse, deleteRecord, getAllData, mergeData, openDatabase, replaceAllData, saveDirectoryItem, saveProfile, saveRecord } from "./db.js";
 import { formatDayLabel, formatDuration, formatTime, getDateKey, getMoscowFields, getPeriodBounds, isFuture, moscowDateTimeInputToIso } from "./datetime.js";
 import { drawTimeChart } from "./charts.js";
-import { exportCsv, exportJson } from "./export.js";
+import { exportCsv, exportJson, exportLayoutDiagnostics } from "./export.js";
 import { parseBackupFile } from "./import.js";
 import { filterDataForPeriod, glucoseStats, painStats, pressureStats, pulseStats, stepsStats, temperatureStats, weightStats } from "./statistics.js";
 import { ageOnDate, calculateBmi, evaluateBmi, evaluateGlucose, evaluatePressure, evaluatePulse, isBirthdayOnDate } from "./medical.js";
@@ -10,6 +10,7 @@ import { DEFAULT_BODY_PARTS, UNIT_BY_ID, directoryItemById, formatMedicationAmou
 import { DAY_PARTS, FOOD_RELATIONS, buildDaySchedule, formatMedicationExpirationRemaining, formatMedicationNameWithExpiration, isCourseCompletedOn, medicationExpirationStatus, validateMedicationCourse } from "./medications.js";
 import { DEFAULT_GLASS_BLUR_INTENSITY, DEFAULT_GLASS_EFFECTS, DEFAULT_GLASS_TRANSPARENCY, DEFAULT_THEME, MAX_GLASS_BLUR_INTENSITY, MAX_GLASS_TRANSPARENCY, MIN_GLASS_BLUR_INTENSITY, MIN_GLASS_TRANSPARENCY, applyGlassBlurIntensity, applyGlassTransparency, applyTheme, applyUiSettings, detectInitialInterface, initializeTheme, initializeUiSettings, saveTheme, saveUiSettings } from "./interface-settings.js";
 import { createAppInfoLoader, createChangeLoader } from "./app-info.js";
+import { createLayoutDiagnostics } from "./layout-diagnostics.js";
 
 const PAGE_SIZE = 60;
 const BIRTHDAY_EMOJIS = Object.freeze(["🎉", "🥳", "🎂", "🎊", "🎈", "🎁", "🍰"]);
@@ -79,6 +80,39 @@ const elements = {
   statsPeriod: document.querySelector("#stats-period"), customPeriod: document.querySelector("#custom-period"), periodStart: document.querySelector("#period-start"), periodEnd: document.querySelector("#period-end"),
   profileContent: document.querySelector("#profile-content"), changesContent: document.querySelector("#changes-content"), directoriesContent: document.querySelector("#directories-content"), directoriesHeading: document.querySelector("#directories-heading"), directoriesBack: document.querySelector("#directories-back"), directoryAdd: document.querySelector("#directory-add-button"), medicationsContent: document.querySelector("#medications-content"), medicationCourseAdd: document.querySelector("#medication-course-add"), offlineBanner: document.querySelector("#offline-banner"), storageWarning: document.querySelector("#storage-warning"), toast: document.querySelector("#toast")
 };
+
+const layoutDiagnostics = createLayoutDiagnostics({ getAppInfo: () => state.appInfo, onStatusChange: renderLayoutDiagnostics });
+
+function renderLayoutDiagnostics({ recording, count, dropped, errors }) {
+  const toggle = document.querySelector("#layout-diagnostics-toggle");
+  toggle.textContent = recording ? "Остановить запись" : count ? "Начать новую запись" : "Начать запись";
+  document.querySelector("#layout-diagnostics-export").disabled = count === 0;
+  document.querySelector("#layout-diagnostics-clear").disabled = count === 0 && !recording;
+  document.querySelector("#layout-diagnostics-status").textContent = recording
+    ? "Идёт запись. Воспроизведите сбой и вернитесь сюда."
+    : count ? `Запись остановлена. Замеров: ${count}.${dropped ? ` Вытеснено старых замеров: ${dropped}.` : ""}${errors ? ` Не удалось снять замеров: ${errors}.` : ""}` : "Запись выключена.";
+}
+
+function bindLayoutDiagnostics() {
+  const errorNode = document.querySelector("#layout-diagnostics-error");
+  document.querySelector("#layout-diagnostics-toggle").addEventListener("click", () => {
+    errorNode.textContent = "";
+    try { if (layoutDiagnostics.status().recording) layoutDiagnostics.stop(); else layoutDiagnostics.start(); }
+    catch (error) { layoutDiagnostics.stop(); showError(errorNode, error); }
+  });
+  document.querySelector("#layout-diagnostics-clear").addEventListener("click", () => { layoutDiagnostics.clear(); errorNode.textContent = ""; });
+  document.querySelector("#layout-diagnostics-export").addEventListener("click", async (event) => {
+    errorNode.textContent = "";
+    const button = event.currentTarget;
+    layoutDiagnostics.stop();
+    button.disabled = true;
+    try {
+      if (await exportLayoutDiagnostics(layoutDiagnostics.report())) showToast("Журнал подготовлен");
+      else errorNode.textContent = "Сохранение отменено. Журнал остался здесь — можно повторить.";
+    } catch (error) { showError(errorNode, error); }
+    finally { renderLayoutDiagnostics(layoutDiagnostics.status()); }
+  });
+}
 
 function aboutSection(title, children) {
   return el("section", { className: "about-section", attrs: { "aria-labelledby": `about-${title.toLowerCase().replaceAll(" ", "-")}` } }, [
@@ -1651,6 +1685,7 @@ function chooseHeadacheEntry() {
 }
 
 function bindEvents() {
+  bindLayoutDiagnostics();
   syncVisualViewport();
   scheduleSafeTopSync();
   pageScrollContainer()?.addEventListener("scroll", () => {

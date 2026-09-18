@@ -648,6 +648,9 @@ html[data-theme="dark"] .toast { background: #eef5f2; color: #172320; }
 /* Interface selection */
 .theme-settings-card { margin-bottom: 16px; padding: 13px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); box-shadow: 0 4px 18px rgba(20, 35, 31, .04); }
 .theme-settings-card h3 { margin: 0 0 10px; font-size: 15px; }
+.layout-diagnostics { margin-top: 16px; }
+.layout-diagnostics p { font-size: 13px; line-height: 1.5; }
+.layout-diagnostics button:disabled { opacity: .5; cursor: default; }
 .theme-segmented { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 15px; background: var(--surface-2); }
 .theme-option { display: grid; min-width: 0; min-height: 48px; padding: 5px; place-items: center; border: 0; border-radius: 11px; background: transparent; color: var(--text); cursor: pointer; }
 .theme-option span { font-size: 24px; line-height: 1; }
