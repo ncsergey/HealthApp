@@ -2,6 +2,7 @@ const SAMPLE_INTERVAL_MS = 100;
 const MAX_SAMPLES = 2400;
 const MAX_DURATION_MS = 10 * 60 * 1000;
 const MAX_INPUT_EVENTS_PER_SAMPLE = 32;
+const BUTTON_CHECK_DELAY_MS = 5000;
 const LAYOUT_CLASSES = ["ios-standalone-viewport", "app-content-fits", "content-fits"];
 const SURFACES = {
   shell: ".app-shell", headerAnchor: ".top-chrome-anchor", header: ".app-header",
@@ -226,6 +227,9 @@ function snapshot(win, probes) {
 
 export function createLayoutDiagnostics({ window: win = globalThis.window, getAppInfo = () => null, onStatusChange = () => {} } = {}) {
   let recording = false;
+  let mode = "full";
+  let buttonCheck = null;
+  let buttonCheckTimer = null;
   let samples = [];
   let nextIndex = 0;
   let dropped = 0;
@@ -247,9 +251,9 @@ export function createLayoutDiagnostics({ window: win = globalThis.window, getAp
   const rotationTimers = new Set();
   const cleanup = [];
 
-  function status() { return { recording, count: samples.length, dropped, errors, startedAt, stoppedAt }; }
+  function status() { return { recording, mode, buttonCheck: buttonCheck ? { ...buttonCheck } : null, count: samples.length, dropped, errors, startedAt, stoppedAt }; }
 
-  function capture(reason) {
+  function capture(reason, measureButton = false) {
     if (!recording) return;
     if (reason) pendingReasons.add(reason);
     if (pendingTimer !== null) { win.clearTimeout(pendingTimer); pendingTimer = null; }
@@ -257,7 +261,15 @@ export function createLayoutDiagnostics({ window: win = globalThis.window, getAp
     pendingReasons.clear();
     const now = win.performance.now();
     try {
-      const sample = { sequence: ++sequence, elapsedMs: number(now - startTime), reasons, inputEvents, inputEventsDropped, ...snapshot(win, probes) };
+      // The button experiment must not run the full snapshot, even on start,
+      // stop or export: any layout read could mask the fault before the timer.
+      const measurements = mode === "full" ? snapshot(win, probes) : {
+        view: win.document.querySelector("section.view:not([hidden])")?.id || null,
+        interface: win.document.documentElement.dataset.interface || null,
+        buttonCheck: { ...buttonCheck }, measurementPerformed: measureButton,
+        layout: { addButton: measureButton ? addButtonMetrics(win) : null }
+      };
+      const sample = { sequence: ++sequence, elapsedMs: number(now - startTime), reasons, inputEvents, inputEventsDropped, ...measurements };
       baseline ||= sample;
       if (samples.length < MAX_SAMPLES) samples.push(sample);
       else { samples[nextIndex] = sample; nextIndex = (nextIndex + 1) % MAX_SAMPLES; dropped += 1; }
@@ -316,23 +328,83 @@ export function createLayoutDiagnostics({ window: win = globalThis.window, getAp
     cleanup.push(() => target.removeEventListener(type, listener, options));
   }
 
+  function cancelButtonCheck(reason) {
+    if (!buttonCheck || !["armed", "waiting"].includes(buttonCheck.phase)) return;
+    if (buttonCheckTimer !== null) {
+      win.clearTimeout(buttonCheckTimer); timers.delete(buttonCheckTimer); buttonCheckTimer = null;
+    }
+    buttonCheck.phase = "cancelled";
+    buttonCheck.cancelReason = reason;
+    capture("button-check-cancelled");
+  }
+
+  function bindButtonCheck(orientation) {
+    const doc = win.document;
+    const inDiary = () => doc.querySelector("section.view:not([hidden])")?.id === "diary-view";
+    const handleOrientation = (event) => {
+      if (event.matches) { if (buttonCheck.phase === "waiting") cancelButtonCheck("returned-to-portrait"); return; }
+      if (buttonCheck.phase !== "armed") return;
+      if (!inDiary()) { cancelButtonCheck("not-in-diary"); return; }
+      buttonCheck.phase = "waiting";
+      buttonCheck.rotationElapsedMs = number(win.performance.now() - startTime);
+      capture("button-check-landscape");
+      buttonCheckTimer = win.setTimeout(() => {
+        timers.delete(buttonCheckTimer); buttonCheckTimer = null;
+        if (!recording || buttonCheck.phase !== "waiting") return;
+        if (doc.visibilityState !== "visible") { cancelButtonCheck("page-hidden"); return; }
+        if (!inDiary() || doc.querySelector("dialog[open]")) { cancelButtonCheck("screen-changed"); return; }
+        buttonCheck.phase = "completed";
+        buttonCheck.completedElapsedMs = number(win.performance.now() - startTime);
+        const errorsBefore = errors;
+        capture(mode === "button-once" ? "button-check-measure" : "button-check-control", mode === "button-once");
+        if (errors !== errorsBefore) { buttonCheck.phase = "failed"; capture("button-check-failed"); }
+        // No status callback, DOM writes, toast or extra measurement here.
+        // The user observes the button; the result stays in memory until export.
+      }, BUTTON_CHECK_DELAY_MS);
+      timers.add(buttonCheckTimer);
+    };
+    if (orientation.addEventListener) listen(orientation, "change", handleOrientation);
+    else { orientation.addListener(handleOrientation); cleanup.push(() => orientation.removeListener(handleOrientation)); }
+    // A tap could itself restore the button. Discard that attempt without
+    // reading geometry or changing normal input handling.
+    for (const type of ["touchstart", "pointerdown", "click"]) listen(doc, type, () => {
+      if (buttonCheck.phase === "waiting") cancelButtonCheck("interaction-before-check");
+    });
+    listen(doc, "visibilitychange", () => { if (doc.visibilityState !== "visible") cancelButtonCheck("page-hidden"); });
+    listen(win, "pagehide", () => cancelButtonCheck("page-hidden"));
+  }
+
   function stop(reason = "stop") {
     if (!recording) return;
+    cancelButtonCheck(reason);
     capture(reason);
     recording = false;
     stoppedAt = new Date().toISOString();
     for (const dispose of cleanup.splice(0)) dispose();
     for (const group of [timers, rotationTimers]) { for (const timer of group) win.clearTimeout(timer); group.clear(); }
-    probeImpact.beforeRemoval = probeImpactSnapshot(win);
-    probes.safeArea.remove();
-    for (const { element } of Object.values(probes.viewport)) element.remove();
-    probes = null;
-    probeImpact.afterRemoval = probeImpactSnapshot(win);
+    buttonCheckTimer = null;
+    if (probes) {
+      probeImpact.beforeRemoval = probeImpactSnapshot(win);
+      probes.safeArea.remove();
+      for (const { element } of Object.values(probes.viewport)) element.remove();
+      probes = null;
+      probeImpact.afterRemoval = probeImpactSnapshot(win);
+    }
     onStatusChange(status());
   }
 
-  function start() {
+  function start({ mode: requestedMode = "full" } = {}) {
     if (recording) return;
+    if (!["full", "button-control", "button-once"].includes(requestedMode)) throw new Error("Неизвестный режим диагностики.");
+    const orientation = win.matchMedia("(orientation: portrait)");
+    if (requestedMode !== "full") {
+      if (!orientation.matches) throw new Error("Начните проверку кнопки в портретной ориентации.");
+      if (!orientation.addEventListener && !orientation.addListener) throw new Error("Браузер не поддерживает эту проверку поворота.");
+    }
+    mode = requestedMode;
+    buttonCheck = mode === "full" ? null : { phase: "armed", delayMs: BUTTON_CHECK_DELAY_MS, rotationElapsedMs: null, completedElapsedMs: null, cancelReason: null };
+    buttonCheckTimer = null;
+    probeImpact = null;
     samples = []; nextIndex = 0; dropped = 0; sequence = 0; errors = 0; baseline = null;
     inputEvents = []; inputEventsDropped = 0;
     pendingReasons.clear(); lastSampleTime = -Infinity;
@@ -350,14 +422,22 @@ export function createLayoutDiagnostics({ window: win = globalThis.window, getAp
         touchActionPanX: supportsCss(win, "touch-action", "pan-x")
       }
     };
-    probeImpact = { beforeInsertion: probeImpactSnapshot(win) };
-    probes = createProbes(win);
+    if (mode === "full") {
+      probeImpact = { beforeInsertion: probeImpactSnapshot(win) };
+      probes = createProbes(win);
+    }
     recording = true;
     capture("start");
+    const deadline = win.setTimeout(() => stop("duration-limit"), MAX_DURATION_MS);
+    cleanup.push(() => win.clearTimeout(deadline));
+    if (mode !== "full") {
+      bindButtonCheck(orientation);
+      onStatusChange(status());
+      return;
+    }
     probeImpact.afterInsertion = probeImpactSnapshot(win);
     listen(win, "orientationchange", () => rotation("orientationchange"));
     listen(win.screen.orientation, "change", () => rotation("screen-orientation"));
-    const orientation = win.matchMedia("(orientation: portrait)");
     const handleOrientation = () => rotation("media-orientation");
     if (orientation.addEventListener) listen(orientation, "change", handleOrientation);
     else if (orientation.addListener) { orientation.addListener(handleOrientation); cleanup.push(() => orientation.removeListener(handleOrientation)); }
@@ -376,15 +456,13 @@ export function createLayoutDiagnostics({ window: win = globalThis.window, getAp
     listen(win, "popstate", () => { capture("popstate"); later("popstate+350ms", 350); });
     const heartbeat = win.setInterval(() => { if (doc.visibilityState !== "hidden") queue("heartbeat"); }, 1000);
     cleanup.push(() => win.clearInterval(heartbeat));
-    const deadline = win.setTimeout(() => stop("duration-limit"), MAX_DURATION_MS);
-    cleanup.push(() => win.clearTimeout(deadline));
     onStatusChange(status());
   }
 
   function report() {
     const info = getAppInfo();
     return {
-      format: "myhealth-layout-diagnostics", schemaVersion: 4, exportedAt: new Date().toISOString(),
+      format: "myhealth-layout-diagnostics", schemaVersion: 5, exportedAt: new Date().toISOString(),
       app: { version: info?.version || null, buildDate: info?.buildDate || null },
       environment: metadata, ...status(),
       limits: { maxSamples: MAX_SAMPLES, eventSampleIntervalMs: SAMPLE_INTERVAL_MS, maxDurationMs: MAX_DURATION_MS, maxInputEventsPerSample: MAX_INPUT_EVENTS_PER_SAMPLE },
@@ -398,6 +476,7 @@ export function createLayoutDiagnostics({ window: win = globalThis.window, getAp
     stop();
     samples = []; baseline = null; metadata = null; probeImpact = null; nextIndex = 0; dropped = 0; errors = 0; startedAt = null; stoppedAt = null;
     inputEvents = []; inputEventsDropped = 0;
+    mode = "full"; buttonCheck = null;
     onStatusChange(status());
   }
 

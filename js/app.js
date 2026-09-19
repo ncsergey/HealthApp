@@ -84,11 +84,28 @@ const elements = {
 
 const layoutDiagnostics = createLayoutDiagnostics({ getAppInfo: () => state.appInfo, onStatusChange: renderLayoutDiagnostics });
 
-function renderLayoutDiagnostics({ recording, count, dropped, errors }) {
+function renderLayoutDiagnostics({ recording, mode, buttonCheck, count, dropped, errors }) {
   const toggle = document.querySelector("#layout-diagnostics-toggle");
   toggle.textContent = recording ? "Остановить запись" : count ? "Начать новую запись" : "Начать запись";
   document.querySelector("#layout-diagnostics-export").disabled = count === 0;
   document.querySelector("#layout-diagnostics-clear").disabled = count === 0 && !recording;
+  document.querySelector("#layout-diagnostics-mode").disabled = recording;
+  if (mode !== "full") {
+    const reasons = {
+      "returned-to-portrait": "Телефон вернули в портретную ориентацию до завершения ожидания.",
+      "interaction-before-check": "Экран коснулись до завершения ожидания.",
+      "not-in-diary": "Поворот выполнен вне экрана «Дневник».",
+      "screen-changed": "Экран сменился или открылось окно.",
+      "page-hidden": "Приложение было скрыто."
+    };
+    document.querySelector("#layout-diagnostics-status").textContent = recording
+      ? "Проверка запущена. Откройте «Дневник», поверните телефон в альбомную ориентацию и 8 секунд не касайтесь экрана. Уведомления о завершении не будет; затем сохраните журнал."
+      : buttonCheck?.phase === "completed"
+        ? mode === "button-once" ? "Однократный замер выполнен. Журнал готов к сохранению." : "Контрольное ожидание завершено без измерений. Журнал готов к сохранению."
+        : buttonCheck?.phase === "failed" ? "Не удалось выполнить замер. Сохраните журнал с ошибкой."
+          : `Проверка отменена. ${reasons[buttonCheck?.cancelReason] || "Ожидание было остановлено."} Начните новую запись.`;
+    return;
+  }
   document.querySelector("#layout-diagnostics-status").textContent = recording
     ? "Идёт запись. Воспроизведите сбой и вернитесь сюда."
     : count ? `Запись остановлена. Замеров: ${count}.${dropped ? ` Вытеснено старых замеров: ${dropped}.` : ""}${errors ? ` Не удалось снять замеров: ${errors}.` : ""}` : "Запись выключена.";
@@ -98,7 +115,10 @@ function bindLayoutDiagnostics() {
   const errorNode = document.querySelector("#layout-diagnostics-error");
   document.querySelector("#layout-diagnostics-toggle").addEventListener("click", () => {
     errorNode.textContent = "";
-    try { if (layoutDiagnostics.status().recording) layoutDiagnostics.stop(); else layoutDiagnostics.start(); }
+    try {
+      if (layoutDiagnostics.status().recording) layoutDiagnostics.stop();
+      else layoutDiagnostics.start({ mode: document.querySelector("#layout-diagnostics-mode").value });
+    }
     catch (error) { layoutDiagnostics.stop(); showError(errorNode, error); }
   });
   document.querySelector("#layout-diagnostics-clear").addEventListener("click", () => { layoutDiagnostics.clear(); errorNode.textContent = ""; });

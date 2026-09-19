@@ -21,7 +21,7 @@ function eventTarget() {
   };
 }
 
-function fixture() {
+function fixture({ onStatusChange } = {}) {
   let now = 0;
   let timerId = 0;
   const timers = new Map();
@@ -90,7 +90,7 @@ function fixture() {
     }
     now = end;
   }
-  const logger = createLayoutDiagnostics({ window: win, getAppInfo: () => ({ version: "1.0.16", buildDate: "19.09.26 00:00", healthData: "PRIVATE MEDICAL TEXT" }) });
+  const logger = createLayoutDiagnostics({ window: win, onStatusChange, getAppInfo: () => ({ version: "1.0.16", buildDate: "19.09.26 00:00", healthData: "PRIVATE MEDICAL TEXT" }) });
   return { logger, win, doc, nodes, orientation, children, timers, advance };
 }
 
@@ -143,7 +143,7 @@ test("viewport probes keep raw browser geometry separate from requested sizing a
   advance(100);
   const report = logger.report();
   const sample = report.samples.at(-1);
-  assert.equal(report.schemaVersion, 4);
+  assert.equal(report.schemaVersion, 5);
   assert.equal(sample.viewportProbes.dvh.requestedHeight, "100dvh");
   assert.equal(sample.viewportProbes.dvh.computedHeight, "667px");
   assert.equal(sample.viewportProbes.dvh.rect.height, 667);
@@ -436,6 +436,131 @@ test("recording automatically stops after ten minutes and a new session starts c
   logger.start();
   assert.equal(logger.status().count, 1);
   assert.equal(logger.report().baseline.sequence, 1);
+  logger.stop();
+});
+
+function trackLayoutReads({ win, doc, nodes }) {
+  const reads = [];
+  for (const [name, node] of Object.entries({ html: doc.documentElement, body: doc.body, ...nodes })) {
+    const original = node.getBoundingClientRect;
+    node.getBoundingClientRect = function () { reads.push(`rect:${name}`); return original.call(this); };
+    for (const property of ["scrollTop", "scrollLeft", "scrollWidth", "scrollHeight", "clientWidth", "clientHeight"]) {
+      const value = node[property];
+      Object.defineProperty(node, property, { get() { reads.push(`${name}.${property}`); return value; } });
+    }
+  }
+  const computedStyle = win.getComputedStyle;
+  win.getComputedStyle = (node, pseudo) => { reads.push(node === nodes["#add-button"] ? "button-style" : "other-style"); return computedStyle(node, pseudo); };
+  const hitTest = doc.elementFromPoint;
+  doc.elementFromPoint = function (x, y) { reads.push("hit-test"); return hitTest.call(this, x, y); };
+  const createElement = doc.createElement;
+  doc.createElement = (...args) => { reads.push("create-element"); return createElement(...args); };
+  for (const [owner, properties] of [[win, ["innerWidth", "innerHeight", "scrollX", "scrollY"]], [win.visualViewport, ["width", "height", "offsetTop", "offsetLeft", "pageTop", "pageLeft", "scale"]]]) {
+    for (const property of properties) {
+      const value = owner[property];
+      Object.defineProperty(owner, property, { get() { reads.push(`viewport.${property}`); return value; } });
+    }
+  }
+  return reads;
+}
+
+test("button experiments do no layout work while waiting, and only the measurement mode reads the button once", () => {
+  for (const mode of ["button-control", "button-once"]) {
+    const notifications = [];
+    const f = fixture({ onStatusChange: (status) => notifications.push(status) });
+    const { logger, doc, win, orientation, children, timers, advance } = f;
+    const reads = trackLayoutReads(f);
+    logger.start({ mode });
+    doc.dispatch("touchstart"); // Navigation to the diary before rotation is allowed.
+    advance(10_000);
+    assert.equal(logger.status().count, 1, "There must be no heartbeat samples while armed");
+    assert.deepEqual(reads, []);
+    orientation.matches = false;
+    orientation.dispatch("change", orientation, { matches: false });
+    win.dispatch("orientationchange");
+    win.dispatch("resize");
+    win.visualViewport.dispatch("resize");
+    advance(4999);
+    assert.deepEqual(reads, []);
+    assert.equal(children.size, 0);
+    assert.equal(logger.status().buttonCheck.phase, "waiting");
+    assert.equal(notifications.length, 1, "The timer and rotation must not update UI status");
+    advance(1);
+    const expected = mode === "button-once" ? ["rect:#add-button", "button-style", "hit-test"] : [];
+    assert.deepEqual(reads, expected);
+    const report = logger.report();
+    assert.equal(report.mode, mode);
+    assert.equal(report.buttonCheck.phase, "completed");
+    assert.equal(report.buttonCheck.completedElapsedMs - report.buttonCheck.rotationElapsedMs, 5000);
+    assert.equal(report.probeImpact, null);
+    const sample = report.samples.at(-1);
+    assert.equal(sample.measurementPerformed, mode === "button-once");
+    assert.equal(Boolean(sample.layout.addButton), mode === "button-once");
+    if (mode === "button-once") assert.equal(sample.layout.addButton.centerHitTest.hitsButton, true);
+    doc.dispatch("touchstart");
+    orientation.dispatch("change", orientation, { matches: true });
+    orientation.dispatch("change", orientation, { matches: false });
+    advance(10_000);
+    assert.equal(logger.status().count, report.count, "Further touches and rotations must not repeat the measurement");
+    assert.equal(notifications.length, 1);
+    logger.stop();
+    assert.deepEqual(reads, expected, "Stop and report must not take another measurement");
+    assert.equal(logger.status().errors, 0);
+    assert.equal(timers.size, 0);
+    assert.equal(notifications.length, 2);
+    assert.doesNotMatch(JSON.stringify(logger.report()), /PRIVATE MEDICAL TEXT|healthData/);
+  }
+});
+
+test("interrupted button experiments cancel without reading geometry and release pending work", () => {
+  const interruptions = [
+    ["touch", (f) => f.doc.dispatch("touchstart"), "interaction-before-check"],
+    ["portrait", (f) => f.orientation.dispatch("change", f.orientation, { matches: true }), "returned-to-portrait"],
+    ["hidden", (f) => { f.doc.visibilityState = "hidden"; f.doc.dispatch("visibilitychange"); }, "page-hidden"],
+    ["navigation", (f) => { f.doc.view.id = "settings-view"; }, "screen-changed"],
+    ["stop", (f) => f.logger.stop(), "stop"]
+  ];
+  for (const [label, interrupt, reason] of interruptions) {
+    const f = fixture();
+    const reads = trackLayoutReads(f);
+    f.logger.start({ mode: "button-once" });
+    f.orientation.dispatch("change", f.orientation, { matches: false });
+    f.advance(1000);
+    interrupt(f);
+    f.advance(6000);
+    assert.equal(f.logger.report().buttonCheck.phase, "cancelled", label);
+    assert.equal(f.logger.report().buttonCheck.cancelReason, reason, label);
+    assert.deepEqual(reads, [], label);
+    f.logger.stop();
+    assert.equal(f.timers.size, 0, label);
+    assert.equal(f.logger.status().errors, 0, label);
+  }
+});
+
+test("button experiments require portrait and diary, preserve completed results and reset for the next run", () => {
+  const { logger, doc, orientation, advance } = fixture();
+  orientation.matches = false;
+  assert.throws(() => logger.start({ mode: "button-once" }), /портретной/);
+  assert.equal(logger.status().recording, false);
+  orientation.matches = true;
+  doc.view.id = "settings-view";
+  logger.start({ mode: "button-control" });
+  orientation.dispatch("change", orientation, { matches: false });
+  assert.equal(logger.status().buttonCheck.cancelReason, "not-in-diary");
+  logger.stop();
+  doc.view.id = "diary-view";
+  logger.start({ mode: "button-once" });
+  orientation.dispatch("change", orientation, { matches: false });
+  advance(5000);
+  logger.stop();
+  const report = logger.report();
+  logger.clear();
+  assert.equal(logger.status().mode, "full");
+  assert.equal(logger.status().buttonCheck, null);
+  assert.equal(report.buttonCheck.phase, "completed");
+  logger.start();
+  assert.equal(logger.report().mode, "full");
+  assert.ok(logger.report().baseline.layout.shell);
   logger.stop();
 });
 

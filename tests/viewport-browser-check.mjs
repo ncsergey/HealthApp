@@ -369,7 +369,7 @@ async function verifyDiagnosticReport(page) {
     window.testDiagnostics.stop();
     return window.testDiagnostics.report();
   });
-  assert.equal(report.schemaVersion, 4);
+  assert.equal(report.schemaVersion, 5);
   assert.equal(report.errors, 0);
   assert.equal(report.environment.cssSupport.webkitScrollbarSelector, true);
   assert.deepEqual(report.probeImpact.beforeInsertion, report.probeImpact.afterInsertion);
@@ -415,6 +415,66 @@ async function verifyDiagnosticReport(page) {
   const stopped = events.find((event) => event.type === "wheel");
   assert.equal(stopped.defaultPreventedAtCapture, false);
   assert.equal(stopped.defaultPreventedAfterDispatch, true, "Stopping propagation must not hide cancellation from the logger");
+}
+
+async function verifyButtonExperiment(interfaceName, mode) {
+  const { context, page } = await createPage();
+  try {
+    await page.evaluate((value) => { document.documentElement.dataset.interface = value; }, interfaceName);
+    await page.locator("#settings-button").tap();
+    await page.locator("#layout-diagnostics-mode").selectOption(mode);
+    await page.locator("#layout-diagnostics-toggle").tap();
+    assert.equal(await page.locator("#layout-diagnostics-mode").isDisabled(), true);
+    await page.locator('[data-view="diary"]').tap();
+    await page.waitForFunction(() => !document.querySelector("#diary-view").hidden && document.querySelector("#settings-view").hidden);
+    await page.evaluate(() => {
+      const button = document.querySelector("#add-button");
+      const reads = window.buttonExperimentReads = { rect: 0, style: 0, hit: 0, uiMutations: 0 };
+      const rectangle = button.getBoundingClientRect;
+      const style = window.getComputedStyle;
+      const hit = document.elementFromPoint;
+      button.getBoundingClientRect = function () { reads.rect++; return rectangle.call(this); };
+      window.getComputedStyle = function (element, pseudo) { if (element === button) reads.style++; return style.call(this, element, pseudo); };
+      document.elementFromPoint = function (...args) { reads.hit++; return hit.apply(this, args); };
+      const observer = new MutationObserver((changes) => { reads.uiMutations += changes.length; });
+      observer.observe(document.querySelector(".layout-diagnostics"), { subtree: true, childList: true, attributes: true, characterData: true });
+      window.restoreExperimentInstrumentation = () => {
+        delete button.getBoundingClientRect;
+        window.getComputedStyle = style;
+        document.elementFromPoint = hit;
+        observer.disconnect();
+      };
+    });
+    await page.setViewportSize({ width: 667, height: 375 });
+    await viewportEvent(page, { width: 667, height: 375, offsetTop: 0 });
+    await page.waitForTimeout(1500);
+    assert.deepEqual(await page.evaluate(() => window.buttonExperimentReads), { rect: 0, style: 0, hit: 0, uiMutations: 0 });
+    await page.waitForTimeout(3800);
+    const expected = mode === "button-once" ? 1 : 0;
+    assert.deepEqual(await page.evaluate(() => window.buttonExperimentReads), { rect: expected, style: expected, hit: expected, uiMutations: 0 });
+    assert.equal(await page.locator("[data-layout-diagnostic-probe]").count(), 0);
+    await page.evaluate(() => {
+      window.restoreExperimentInstrumentation();
+      Object.defineProperty(navigator, "canShare", { configurable: true, value: () => true });
+      Object.defineProperty(navigator, "share", { configurable: true, value: async ({ files }) => {
+        window.buttonExperimentReport = JSON.parse(await files[0].text());
+      } });
+    });
+    await page.setViewportSize({ width: 375, height: 647 });
+    await viewportEvent(page, { width: 375, height: 647, offsetTop: 0 });
+    await page.locator("#settings-button").tap();
+    await page.locator("#layout-diagnostics-export").tap();
+    await page.waitForFunction(() => Boolean(window.buttonExperimentReport));
+    const report = await page.evaluate(() => window.buttonExperimentReport);
+    assert.equal(report.mode, mode);
+    assert.equal(report.buttonCheck.phase, "completed");
+    assert.ok(report.buttonCheck.completedElapsedMs - report.buttonCheck.rotationElapsedMs >= 5000);
+    assert.equal(report.samples.filter((sample) => sample.measurementPerformed).length, expected);
+    assert.equal(report.errors, 0);
+    assert.equal(report.probeImpact, null);
+    assert.equal(await page.locator("#layout-diagnostics-mode").isDisabled(), false);
+    console.log(`PASS ${interfaceName} ${mode}: real orientation event, quiet waiting, exact measurement count, no UI updates and export`);
+  } finally { await context.close(); }
 }
 
 try {
@@ -489,6 +549,8 @@ try {
     console.log(`PASS ${interfaceName}: modal backdrop and fixed areas cancel the first move, rotation with an open modal, reopening, native dialog scroll, close and backdrop taps`);
   }
   await context.close();
+  await verifyButtonExperiment("classic", "button-control");
+  await verifyButtonExperiment("modern", "button-once");
   for (const [label, userAgent, standalone] of [["iOS browser", iosAgent, false], ["Android PWA", "Mozilla/5.0 (Linux; Android 13) Chrome/120 Mobile Safari/537.36", true]]) {
     const { context, page } = await createPage(userAgent, standalone);
     await page.setViewportSize({ width: 375, height: 667 });
