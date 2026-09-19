@@ -40,6 +40,14 @@ function fixture() {
   const body = surface("BODY");
   body.append = (...nodes) => { for (const node of nodes) { children.add(node); node.remove = () => children.delete(node); } };
   const nodes = Object.fromEntries([".app-shell", ".top-chrome-anchor", ".app-header", ".app-main", ".app-content", ".bottom-chrome-anchor", ".bottom-nav"].map((selector) => [selector, surface()]));
+  const button = nodes["#add-button"] = surface("BUTTON");
+  const icon = { tagName: "SPAN", id: "PRIVATE MEDICAL TEXT", textContent: "PRIVATE MEDICAL TEXT" };
+  button.hidden = false;
+  button.parentElement = { hidden: false, closest: function () { return this.hidden ? this : null; } };
+  button.contains = (target) => target === icon;
+  button.rect = { top: 500, right: 352, bottom: 552, left: 300, width: 52, height: 52 };
+  Object.assign(button.styles, { display: "inline-flex", visibility: "visible", opacity: "1", position: "fixed", zIndex: "16", pointerEvents: "auto" });
+  nodes[".app-main"].contains = (target) => target === button || button.contains(target);
   const doc = {
     ...eventTarget(), documentElement: root, body, scrollingElement: root, visibilityState: "visible",
     activeElement: { tagName: "INPUT", get value() { assert.fail("Do not read health input values"); }, textContent: "PRIVATE MEDICAL TEXT" },
@@ -50,6 +58,8 @@ function fixture() {
       if (selector === 'meta[name="apple-mobile-web-app-status-bar-style"]') return { content: "default" };
       return nodes[selector] || null;
     },
+    hitTarget: icon,
+    elementFromPoint(x, y) { this.hitPoint = { x, y }; return this.hitTarget; },
     querySelectorAll: () => [],
     createElement: () => surface()
   };
@@ -133,7 +143,7 @@ test("viewport probes keep raw browser geometry separate from requested sizing a
   advance(100);
   const report = logger.report();
   const sample = report.samples.at(-1);
-  assert.equal(report.schemaVersion, 3);
+  assert.equal(report.schemaVersion, 4);
   assert.equal(sample.viewportProbes.dvh.requestedHeight, "100dvh");
   assert.equal(sample.viewportProbes.dvh.computedHeight, "667px");
   assert.equal(sample.viewportProbes.dvh.rect.height, 667);
@@ -213,6 +223,105 @@ test("touch movement is sampled even without scroll events, with high-frequency 
   assert.equal(sample.inputEvents.length, logger.report().limits.maxInputEventsPerSample);
   assert.equal(sample.inputEventsDropped, 200 - sample.inputEvents.length);
   logger.stop();
+});
+
+test("button measurements preserve pre-rotation, post-rotation and both sides of touch dispatch", () => {
+  const { logger, win, doc, nodes, advance } = fixture();
+  const button = nodes["#add-button"];
+  logger.start();
+  const baseline = logger.report().baseline.layout.addButton;
+  assert.deepEqual(baseline.centerHitTest, { x: 326, y: 526, status: "hit", hitsButton: true, target: { surface: "main", tagName: "SPAN" } });
+  assert.equal(baseline.hidden, false);
+  assert.equal(baseline.hiddenAncestor, false);
+  assert.equal(baseline.display, "inline-flex");
+  assert.equal(baseline.visibility, "visible");
+
+  button.rect = { top: 201.234, right: 572.123, bottom: 253.234, left: 520.123, width: 52, height: 52 };
+  button.styles.opacity = "0";
+  win.scrollY = win.visualViewport.offsetTop = 20;
+  win.dispatch("orientationchange");
+  advance(100);
+  const rotated = logger.report().samples.find((sample) => sample.reasons.includes("orientationchange+100ms")).layout.addButton;
+  assert.equal(rotated.rect.top, 201.23);
+  assert.equal(rotated.rect.left, 520.12);
+  assert.equal(rotated.opacity, "0");
+  assert.deepEqual(doc.hitPoint, { x: 546.123, y: 227.234 }, "Hit testing uses the unrounded client center without viewport or scroll corrections");
+  assert.equal(rotated.centerHitTest.x, 546.12);
+  assert.equal(rotated.centerHitTest.y, 227.23);
+
+  doc.dispatch("touchstart", nodes[".app-main"], { touches: [{}] });
+  // Model a target/bubble handler changing the button during the same dispatch.
+  button.styles.opacity = "1";
+  advance(0);
+  const touched = logger.report().samples.at(-1);
+  assert.ok(touched.reasons.includes("touchstart"));
+  assert.equal(touched.inputEvents[0].addButtonAtCapture.opacity, "0");
+  assert.equal(touched.layout.addButton.opacity, "1");
+  advance(350);
+  const settled = logger.report().samples.find((sample) => sample.reasons.includes("touchstart+350ms"));
+  assert.equal(settled.layout.addButton.opacity, "1");
+  assert.equal(baseline.opacity, "1");
+  assert.equal(baseline.rect.top, 500);
+  assert.doesNotMatch(JSON.stringify(logger.report()), /PRIVATE MEDICAL TEXT|healthData/);
+  logger.stop();
+});
+
+test("button diagnostics distinguish hidden ancestors, no box, coverage and an empty hit test", () => {
+  const { logger, doc, nodes } = fixture();
+  const button = nodes["#add-button"];
+  const take = () => { doc.dispatch("click"); return logger.report().samples.at(-1).layout.addButton; };
+  logger.start();
+  doc.hitTarget = { tagName: "DIALOG", id: "PRIVATE MEDICAL TEXT", closest: () => ({}) };
+  let metric = take();
+  assert.equal(metric.centerHitTest.hitsButton, false);
+  assert.deepEqual(metric.centerHitTest.target, { surface: "dialog", tagName: "DIALOG" });
+  doc.hitTarget = null;
+  metric = take();
+  assert.equal(metric.centerHitTest.status, "no-hit");
+  assert.equal(metric.centerHitTest.hitsButton, false);
+  assert.equal(metric.centerHitTest.target, null);
+
+  button.parentElement.hidden = true;
+  button.rect = { top: 0, right: 0, bottom: 0, left: 0, width: 0, height: 0 };
+  doc.elementFromPoint = () => assert.fail("A zero-size hidden button has no center to test");
+  metric = take();
+  assert.equal(metric.hidden, false);
+  assert.equal(metric.hiddenAncestor, true);
+  assert.equal(metric.display, "inline-flex", "An element's own display need not change inside a hidden view");
+  assert.deepEqual(metric.centerHitTest, { x: null, y: null, status: "no-box", hitsButton: null, target: null });
+  button.hidden = true;
+  button.styles.display = "none";
+  button.styles.visibility = "hidden";
+  metric = take();
+  assert.equal(metric.hidden, true);
+  assert.equal(metric.display, "none");
+  assert.equal(metric.visibility, "hidden");
+  assert.doesNotMatch(JSON.stringify(logger.report()), /PRIVATE MEDICAL TEXT/);
+  logger.stop();
+  assert.equal(logger.status().errors, 0);
+});
+
+test("missing buttons and unavailable hit tests are explicit without interrupting recording", () => {
+  const { logger, doc, nodes, advance } = fixture();
+  delete doc.elementFromPoint;
+  logger.start();
+  let metric = logger.report().baseline.layout.addButton;
+  assert.equal(metric.centerHitTest.status, "unavailable");
+  assert.equal(metric.centerHitTest.hitsButton, null);
+  doc.elementFromPoint = () => { throw new Error("Hit testing unavailable"); };
+  doc.dispatch("touchstart");
+  advance(0);
+  metric = logger.report().samples.at(-1).layout.addButton;
+  assert.equal(metric.centerHitTest.status, "error");
+  assert.equal(metric.centerHitTest.hitsButton, null);
+  delete nodes["#add-button"];
+  doc.dispatch("touchstart");
+  advance(0);
+  const sample = logger.report().samples.at(-1);
+  assert.equal(sample.layout.addButton, null);
+  assert.equal(sample.inputEvents[0].addButtonAtCapture, null);
+  logger.stop();
+  assert.equal(logger.status().errors, 0);
 });
 
 test("classes, touch-action and both scrollbar styles are sampled again after layout changes", () => {

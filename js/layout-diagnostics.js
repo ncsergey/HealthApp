@@ -79,6 +79,40 @@ function inputTarget(win, target) {
   return { surface, tagName: target?.tagName || null };
 }
 
+function addButtonMetrics(win) {
+  const doc = win.document;
+  const button = doc.querySelector("#add-button");
+  if (!button) return null;
+  const rect = button.getBoundingClientRect();
+  const style = win.getComputedStyle(button);
+  const hasBox = rect.width > 0 && rect.height > 0;
+  const x = hasBox ? rect.left + rect.width / 2 : null;
+  const y = hasBox ? rect.top + rect.height / 2 : null;
+  const centerHitTest = { x: number(x), y: number(y), status: "no-box", hitsButton: null, target: null };
+  if (hasBox) {
+    centerHitTest.status = "unavailable";
+    if (typeof doc.elementFromPoint === "function") {
+      try {
+        // Both APIs use client coordinates. Keep the raw point; adding scrollY
+        // or visualViewport.offsetTop would test a different location.
+        const target = doc.elementFromPoint(x, y);
+        centerHitTest.status = target ? "hit" : "no-hit";
+        centerHitTest.hitsButton = target ? target === button || button.contains(target) : false;
+        centerHitTest.target = target ? inputTarget(win, target) : null;
+      } catch { centerHitTest.status = "error"; }
+    }
+  }
+  // A successful hit test does not prove that the compositor painted the button.
+  return {
+    rect: Object.fromEntries(["top", "right", "bottom", "left", "width", "height"].map((key) => [key, number(rect[key])])),
+    hidden: boolean(button.hidden), hiddenAncestor: Boolean(button.parentElement?.closest("[hidden]")),
+    ...Object.fromEntries([
+      "display", "visibility", "opacity", "position", "top", "right", "bottom", "left", "zIndex", "pointerEvents", "transform"
+    ].map((key) => [key, style[key] || null])),
+    centerHitTest
+  };
+}
+
 function createProbes(win) {
   const doc = win.document;
   const make = (name) => {
@@ -152,6 +186,7 @@ function snapshot(win, probes) {
     if (!element) continue;
     layout[name] = surfaceMetrics(win, element, name === "main");
   }
+  layout.addButton = addButtonMetrics(win);
   return {
     view: doc.querySelector("section.view:not([hidden])")?.id || null,
     orientation: {
@@ -250,6 +285,9 @@ export function createLayoutDiagnostics({ window: win = globalThis.window, getAp
       isTrusted: boolean(event.isTrusted), cancelable: boolean(event.cancelable),
       defaultPreventedAtCapture: boolean(event.defaultPrevented)
     };
+    // Preserve the state at the start of a tap, before target/bubble handlers.
+    // The regular sample below and its delayed sample capture the state after it.
+    if (event.type === "touchstart") observation.addButtonAtCapture = addButtonMetrics(win);
     // A new task runs after all capture/target/bubble handlers, even when one
     // stops propagation. A microtask inside a native listener can run too soon.
     const timer = win.setTimeout(() => {
@@ -346,7 +384,7 @@ export function createLayoutDiagnostics({ window: win = globalThis.window, getAp
   function report() {
     const info = getAppInfo();
     return {
-      format: "myhealth-layout-diagnostics", schemaVersion: 3, exportedAt: new Date().toISOString(),
+      format: "myhealth-layout-diagnostics", schemaVersion: 4, exportedAt: new Date().toISOString(),
       app: { version: info?.version || null, buildDate: info?.buildDate || null },
       environment: metadata, ...status(),
       limits: { maxSamples: MAX_SAMPLES, eventSampleIntervalMs: SAMPLE_INTERVAL_MS, maxDurationMs: MAX_DURATION_MS, maxInputEventsPerSample: MAX_INPUT_EVENTS_PER_SAMPLE },
