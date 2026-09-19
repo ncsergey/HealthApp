@@ -105,11 +105,11 @@ async function verifyPanelGestures(page, enabled) {
   }
 }
 
-async function contentGesture(page, { top = 0, deltaY = 40, deltaX = 0 } = {}) {
-  const result = await page.evaluate(({ top, deltaY, deltaX }) => {
+async function contentGesture(page, { top = 0, deltaY = 40, deltaX = 0, selector = ".app-content" } = {}) {
+  const result = await page.evaluate(({ top, deltaY, deltaX, selector }) => {
     const main = document.querySelector(".app-main");
     main.scrollTop = top === "bottom" ? main.scrollHeight - main.clientHeight : top;
-    const target = document.querySelector(".app-content");
+    const target = document.querySelector(selector);
     const prevented = [];
     for (const type of ["touchstart", "touchmove", "touchend"]) {
       const touch = new Touch({ identifier: 1, target, clientX: 150 + (type === "touchstart" ? 0 : deltaX), clientY: 300 + (type === "touchstart" ? 0 : deltaY) });
@@ -119,7 +119,7 @@ async function contentGesture(page, { top = 0, deltaY = 40, deltaX = 0 } = {}) {
       prevented.push(event.defaultPrevented);
     }
     return prevented;
-  }, { top, deltaY, deltaX });
+  }, { top, deltaY, deltaX, selector });
   assert.equal(result[0], false, "Touches must still start normally");
   assert.equal(result[2], false, "Touches must still end normally");
   return result[1];
@@ -154,16 +154,15 @@ async function verifyContentMode(page, fits, enabled = true) {
   assert.notEqual(state.dialogScrollbar, "none", "Dialogs keep their own scrollbar");
 }
 
-async function swipeContent(page, { x = 16, reverse = false } = {}) {
-  const { height } = await page.locator(".app-main").boundingBox();
-  const start = height * (reverse ? 0.4 : 0.7);
-  const end = height * (reverse ? 0.7 : 0.4);
-  assert.equal(await page.evaluate(({ x, y }) => Boolean(document.elementFromPoint(x, y)?.closest(".app-main")), { x, y: start }), true);
+async function touchDrag(page, start, end) {
   const session = await page.context().newCDPSession(page);
   try {
-    await session.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y: start }] });
+    await session.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [start] });
     for (let step = 1; step <= 10; step++) {
-      await session.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x, y: start + (end - start) * step / 10 }] });
+      await session.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{
+        x: start.x + (end.x - start.x) * step / 10,
+        y: start.y + (end.y - start.y) * step / 10
+      }] });
       await page.waitForTimeout(20);
     }
     // Hold before release so momentum cannot affect the following checks.
@@ -174,10 +173,64 @@ async function swipeContent(page, { x = 16, reverse = false } = {}) {
   }
 }
 
+async function swipeContent(page, { x = 16, reverse = false } = {}) {
+  const { height } = await page.locator(".app-main").boundingBox();
+  const start = { x, y: height * (reverse ? 0.4 : 0.7) };
+  const end = { x, y: height * (reverse ? 0.7 : 0.4) };
+  assert.equal(await page.evaluate(({ x, y }) => Boolean(document.elementFromPoint(x, y)?.closest(".app-main")), start), true);
+  await touchDrag(page, start, end);
+}
+
+async function verifyHorizontalControls(page) {
+  // Exercise the app's real control types inside a fitting screen. Absolute
+  // placement keeps the fixture from changing the vertical overflow mode.
+  await page.locator(".app-content").evaluate((content) => {
+    const fixture = document.createElement("div");
+    fixture.id = "test-horizontal-controls";
+    fixture.style.cssText = "position:absolute;top:180px;left:24px;right:24px";
+    fixture.innerHTML = '<div class="filter-scroll" style="display:block;overflow-x:auto"><div style="width:900px;height:48px"><button type="button">Filter</button></div></div><div class="unified-range-control"><input type="range" min="0" max="100" value="50"></div>';
+    content.append(fixture);
+  });
+  try {
+    await verifyContentMode(page, true);
+    const filter = "#test-horizontal-controls .filter-scroll";
+    const range = "#test-horizontal-controls input";
+    for (const selector of [`${filter} button`, range]) {
+      assert.equal(await contentGesture(page, { selector, deltaX: 40, deltaY: 2 }), false, "Real horizontal controls must accept sideways movement");
+      assert.equal(await contentGesture(page, { selector, deltaY: 40 }), true, "Controls must not enable vertical dragging on a short screen");
+    }
+    const filterBox = await page.locator(filter).boundingBox();
+    await touchDrag(page,
+      { x: filterBox.x + filterBox.width * 0.8, y: filterBox.y + 24 },
+      { x: filterBox.x + filterBox.width * 0.2, y: filterBox.y + 24 });
+    assert.ok(await page.locator(filter).evaluate((element) => element.scrollLeft > 50), "The filter strip must scroll with native touch events");
+    const rangeBox = await page.locator(range).boundingBox();
+    await touchDrag(page,
+      { x: rangeBox.x + rangeBox.width * 0.5, y: rangeBox.y + rangeBox.height / 2 },
+      { x: rangeBox.x + rangeBox.width * 0.8, y: rangeBox.y + rangeBox.height / 2 });
+    assert.ok(Number(await page.locator(range).inputValue()) > 65, "A native touch drag must change the slider value");
+    await page.locator(range).evaluate((element) => { element.disabled = true; });
+    assert.equal(await contentGesture(page, { selector: range, deltaX: 40, deltaY: 2 }), true, "Disabled sliders must not bypass the lock");
+    await page.locator(filter).evaluate((element) => { element.style.overflowX = "hidden"; });
+    assert.equal(await contentGesture(page, { selector: `${filter} button`, deltaX: 40, deltaY: 2 }), true, "Clipped filters must not bypass the lock");
+    await page.locator(filter).evaluate((element) => {
+      element.style.overflowX = "auto";
+      element.firstElementChild.style.width = "100%";
+    });
+    assert.equal(await contentGesture(page, { selector: `${filter} button`, deltaX: 40, deltaY: 2 }), true, "A filter strip that fits horizontally must not bypass the lock");
+  } finally {
+    await page.locator("#test-horizontal-controls").evaluate((element) => element.remove());
+  }
+}
+
 async function verifyContentSwipe(page) {
   await page.locator(".app-main").evaluate((main) => { main.scrollTop = 0; });
   await swipeContent(page);
-  assert.ok(await page.locator(".app-main").evaluate((main) => main.scrollTop > 50), "Content must still scroll with a native touch gesture");
+  const state = await page.locator(".app-main").evaluate((main) => ({
+    top: main.scrollTop, height: main.clientHeight, contentHeight: main.scrollHeight,
+    touchAction: getComputedStyle(main).touchAction, overflow: getComputedStyle(main).overflowY
+  }));
+  assert.ok(state.top > 50, `Content must still scroll with a native touch gesture: ${JSON.stringify(state)}`);
 }
 
 async function verifyShortContent(page, gap) {
@@ -190,8 +243,10 @@ async function verifyShortContent(page, gap) {
     content.style.minHeight = `${Math.floor(main.clientHeight - top - padding - 24)}px`;
   });
   await verifyContentMode(page, true);
-  for (const deltaY of [-40, 40]) assert.equal(await contentGesture(page, { deltaY }), true, "Short screens must block vertical dragging in either direction");
-  assert.equal(await contentGesture(page, { deltaY: 2, deltaX: 40 }), false, "Horizontal controls stay available");
+  for (const [deltaX, deltaY] of [[0, -40], [0, 40], [40, 2], [-40, 0], [40, 40], [0, 0]]) {
+    assert.equal(await contentGesture(page, { deltaX, deltaY }), true, "Short screens must cancel the first move in every direction outside horizontal controls");
+  }
+  await verifyHorizontalControls(page);
   // A list that fits in portrait needs scrolling in landscape, and must lock
   // again after returning. This also exercises the content ResizeObserver.
   await page.setViewportSize({ width: 667, height: 375 });
@@ -201,6 +256,9 @@ async function verifyShortContent(page, gap) {
   await page.setViewportSize({ width: 375, height: 667 });
   verifyBounds(await viewportEvent(page, { width: 375, height: 647, offsetTop: 20 }), 647, gap, "Short content after rotation");
   await verifyContentMode(page, true);
+  for (const [deltaX, deltaY] of [[0, -40], [0, 40], [40, 2], [-40, 0], [40, 40], [0, 0]]) {
+    assert.equal(await contentGesture(page, { deltaX, deltaY }), true, "The first-move lock must survive rotation");
+  }
   for (const x of [150, 373]) {
     for (const reverse of [false, true]) await swipeContent(page, { x, reverse });
   }
@@ -311,7 +369,7 @@ try {
     assert.equal(restored.keyboard, false);
     verifyBounds(restored, 647, gap, `${interfaceName} keyboard close`);
     await verifyDiagnosticReport(page);
-    console.log(`PASS ${interfaceName}: rotation, four screens, panel drag guard, short content and edges locked, long content swipe, touch taps, intermediate offsets, preserved inner scroll, resume, keyboard`);
+    console.log(`PASS ${interfaceName}: rotation, four screens, panel drag guard, all short-screen movements locked, native horizontal controls, long content swipe, touch taps, intermediate offsets, preserved inner scroll, resume, keyboard`);
     console.log(`PASS ${interfaceName}: diagnostic classes, scrollbar styles and final cancellation, including stopped propagation and native touch events`);
   }
   await context.close();

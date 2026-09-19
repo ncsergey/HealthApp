@@ -36,6 +36,13 @@ export function bindContentScrollGuard(win = window) {
   observer.observe(content);
   updateScrollable();
 
+  const allowsHorizontalDrag = (target) => {
+    const control = target?.closest?.('input[type="range"]:enabled, .filter-scroll');
+    if (!control || !main.contains(control)) return false;
+    if (control.matches('input[type="range"]')) return true;
+    return control.scrollWidth - control.clientWidth > edgeTolerance &&
+      ["auto", "scroll"].includes(win.getComputedStyle(control).overflowX);
+  };
   let previousTouch = null;
   const remember = (touch) => ({ id: touch.identifier, x: touch.clientX, y: touch.clientY });
   main.addEventListener("touchstart", (event) => {
@@ -44,6 +51,15 @@ export function bindContentScrollGuard(win = window) {
   }, { passive: true });
   main.addEventListener("touchmove", (event) => {
     const touch = event.touches.length === 1 ? event.touches[0] : null;
+    const maxScroll = main.scrollHeight - main.clientHeight;
+    // A fitting screen has no native movement to preserve outside actual
+    // horizontal controls. Cancel even the first or sideways move before
+    // direction detection can let the viewport start handling the gesture.
+    if (maxScroll <= edgeTolerance && !allowsHorizontalDrag(event.target)) {
+      previousTouch = touch ? remember(touch) : null;
+      if (event.cancelable) event.preventDefault();
+      return;
+    }
     if (!touch || !previousTouch || touch.identifier !== previousTouch.id) {
       previousTouch = null;
       return;
@@ -54,7 +70,6 @@ export function bindContentScrollGuard(win = window) {
     // Preserve horizontal filters and range controls. Vertical scrolling is
     // native whenever there is content left in the requested direction.
     if (Math.abs(deltaY) <= Math.abs(deltaX)) return;
-    const maxScroll = main.scrollHeight - main.clientHeight;
     const atBoundary = maxScroll <= edgeTolerance ||
       (deltaY > 0 && main.scrollTop <= edgeTolerance) ||
       (deltaY < 0 && main.scrollTop >= maxScroll - edgeTolerance);
