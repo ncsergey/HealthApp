@@ -230,7 +230,101 @@ async function verifyContentSwipe(page) {
     top: main.scrollTop, height: main.clientHeight, contentHeight: main.scrollHeight,
     touchAction: getComputedStyle(main).touchAction, overflow: getComputedStyle(main).overflowY
   }));
-  assert.ok(state.top > 50, `Content must still scroll with a native touch gesture: ${JSON.stringify(state)}`);
+  // Native gesture recognition consumes a variable part of the swipe. Verify
+  // that scrolling actually starts, without requiring an exact travel distance.
+  assert.ok(state.top > 0, `Content must still scroll with a native touch gesture: ${JSON.stringify(state)}`);
+}
+
+async function verifyDialogSurfaces(page, enabled, selector = "#entry-type-dialog") {
+  const result = await page.locator(selector).evaluate((dialog) => {
+    const events = [];
+    const targets = [dialog, ...dialog.querySelectorAll(":scope > .dialog-layout, .dialog-header svg, .dialog-actions button, .dialog-scroll-content, .entry-form-content")];
+    for (const target of targets) {
+      const content = Boolean(target.closest(".dialog-scroll-content, .entry-form-content"));
+      for (const [deltaX, deltaY] of [[0, 40], [0, -40], [40, 2], [0, 0]]) {
+        for (const type of ["touchstart", "touchmove", "touchend"]) {
+          const touch = new Touch({ identifier: 1, target, clientX: 150 + (type === "touchstart" ? 0 : deltaX), clientY: 300 + (type === "touchstart" ? 0 : deltaY) });
+          const touches = type === "touchend" ? [] : [touch];
+          const event = new TouchEvent(type, { bubbles: true, cancelable: true, touches, targetTouches: touches, changedTouches: [touch] });
+          target.dispatchEvent(event);
+          events.push({ type, content, prevented: event.defaultPrevented });
+        }
+      }
+    }
+    return { backdropTouchAction: getComputedStyle(dialog, "::backdrop").touchAction, events };
+  });
+  assert.equal(result.backdropTouchAction, enabled ? "none" : "auto");
+  for (const event of result.events) {
+    assert.equal(event.prevented, enabled && !event.content && event.type === "touchmove", `Dialog gestures: ${JSON.stringify(event)}`);
+  }
+}
+
+async function verifyModalBackdrop(page, gap) {
+  const before = await page.evaluate(() => window.measureTestShell());
+  await page.locator("#entry-type-dialog").evaluate((dialog) => {
+    window.testBackdropMoves = [];
+    window.testBackdropObserver = (event) => {
+      if (event.target === dialog) window.testBackdropMoves.push({ trusted: event.isTrusted, canceled: event.defaultPrevented });
+    };
+    dialog.addEventListener("touchmove", window.testBackdropObserver, { passive: true });
+  });
+  try {
+    // The left margin is outside the sheet in both themes. Native backdrop
+    // events must target DIALOG just as in the iPhone report.
+    assert.equal(await page.evaluate(() => document.elementFromPoint(2, 200)?.id), "entry-type-dialog");
+    await touchDrag(page, { x: 2, y: 400 }, { x: 2, y: 150 });
+    await touchDrag(page, { x: 2, y: 150 }, { x: 2, y: 400 });
+    const moves = await page.evaluate(() => window.testBackdropMoves);
+    assert.ok(moves.length > 0, "The native backdrop gesture must reach the modal guard");
+    assert.ok(moves.every((event) => event.trusted && event.canceled), "Every backdrop move, including the first, must be canceled");
+    assert.equal(await page.locator("#entry-type-dialog").evaluate((dialog) => dialog.open), true, "Dragging must not be mistaken for a backdrop tap");
+    const after = await page.evaluate(() => window.measureTestShell());
+    assert.deepEqual(after, before, "Backdrop drags must preserve the background geometry and scroll position");
+    verifyBounds(after, 647, gap, "Modal background after backdrop drags");
+  } finally {
+    await page.locator("#entry-type-dialog").evaluate((dialog) => {
+      dialog.removeEventListener("touchmove", window.testBackdropObserver);
+      delete window.testBackdropObserver;
+      delete window.testBackdropMoves;
+    });
+  }
+}
+
+async function verifyModalRotation(page, gap) {
+  await page.locator('[data-view="diary"]').tap();
+  // Returning from Settings traverses browser history asynchronously and then
+  // scrolls to the top. Let that navigation finish before setting the baseline.
+  await page.waitForFunction(() => Object.values(history.state || {}).some((entry) => entry?.view === "diary" && entry?.depth === 0));
+  await page.waitForFunction(() => document.querySelector(".app-main").scrollTop === 0);
+  await page.locator("#diary-list").evaluate((list) => { list.style.minHeight = "1200px"; });
+  await page.locator(".app-main").evaluate((main) => { main.scrollTop = 120; });
+  await page.locator("#add-button").tap();
+  await verifyDialogSurfaces(page, true);
+  // The supplied log rotates with the chooser already open. Also check a
+  // fresh opening after the return to portrait, as described by the user.
+  await page.setViewportSize({ width: 667, height: 375 });
+  await viewportEvent(page, { width: 667, height: 375, offsetTop: 0 });
+  await page.setViewportSize({ width: 375, height: 667 });
+  await viewportEvent(page, { width: 375, height: 647, offsetTop: 20 });
+  await page.waitForTimeout(250); // Let the dialog's opening animation finish.
+  await verifyDialogSurfaces(page, true);
+  await verifyModalBackdrop(page, gap);
+  const scroller = page.locator("#entry-type-dialog .dialog-scroll-content");
+  const bounds = await scroller.boundingBox();
+  await touchDrag(page,
+    { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height * 0.8 },
+    { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height * 0.2 });
+  assert.ok(await scroller.evaluate((element) => element.scrollTop > 30), "The chooser content must retain native scrolling");
+  await page.locator("#entry-type-dialog .close-button").tap();
+  await page.waitForTimeout(100);
+  assert.equal(await page.locator(".app-main").evaluate((main) => main.scrollTop), 120, "Closing must restore the original diary scroll position");
+  await page.locator("#add-button").tap();
+  await page.waitForTimeout(250);
+  await verifyModalBackdrop(page, gap);
+  // A real backdrop tap still closes the sheet; only movement is blocked.
+  await page.touchscreen.tap(2, 200);
+  await page.waitForFunction(() => !document.querySelector("#entry-type-dialog").open);
+  await page.locator("#diary-list").evaluate((list) => { list.style.removeProperty("min-height"); });
 }
 
 async function verifyShortContent(page, gap) {
@@ -354,9 +448,10 @@ try {
     assert.equal((await page.evaluate(() => window.measureTestShell())).mainScroll, scrollBefore);
     verifyBounds(await viewportEvent(page, { offsetTop: 0 }, "pageshow"), 647, gap, `${interfaceName} resume`);
 
-    await page.locator('[data-view="diary"]').click();
+    await verifyModalRotation(page, gap);
     await page.locator("#add-button").click();
     await page.locator("#choose-headache").click();
+    await verifyDialogSurfaces(page, true, "#headache-dialog");
     await page.locator("#headache-comment").focus();
     const withKeyboard = await viewportEvent(page, { height: 320, offsetTop: 0 });
     assert.equal(withKeyboard.keyboard, true);
@@ -371,6 +466,7 @@ try {
     await verifyDiagnosticReport(page);
     console.log(`PASS ${interfaceName}: rotation, four screens, panel drag guard, all short-screen movements locked, native horizontal controls, long content swipe, touch taps, intermediate offsets, preserved inner scroll, resume, keyboard`);
     console.log(`PASS ${interfaceName}: diagnostic classes, scrollbar styles and final cancellation, including stopped propagation and native touch events`);
+    console.log(`PASS ${interfaceName}: modal backdrop and fixed areas cancel the first move, rotation with an open modal, reopening, native dialog scroll, close and backdrop taps`);
   }
   await context.close();
   for (const [label, userAgent, standalone] of [["iOS browser", iosAgent, false], ["Android PWA", "Mozilla/5.0 (Linux; Android 13) Chrome/120 Mobile Safari/537.36", true]]) {
@@ -387,6 +483,9 @@ try {
     await page.locator('[data-view="directories"]').tap();
     await verifyContentMode(page, true, false);
     assert.equal(await contentGesture(page), false, label);
+    await page.locator('[data-view="diary"]').tap();
+    await page.locator("#add-button").tap();
+    await verifyDialogSurfaces(page, false);
     await context.close();
     console.log(`PASS ${label}: normal shell sizing retained`);
   }

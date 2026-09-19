@@ -18,6 +18,21 @@ export function bindPanelDragGuard(win = window) {
   }
 }
 
+export function bindDialogDragGuard(win = window) {
+  if (!isIosStandalone(win)) return;
+  for (const dialog of win.document.querySelectorAll("dialog")) {
+    dialog.addEventListener("touchmove", (event) => {
+      if (!dialog.open) return;
+      const content = event.target?.closest?.(".entry-form-content, .dialog-scroll-content");
+      if (content && dialog.contains(content)) return;
+      // Backdrop touches target the dialog itself, outside .app-main's guard.
+      // Cancel the first move there and on the fixed parts of the dialog,
+      // before iOS starts panning its outer viewport. Keep content gestures native.
+      if (event.cancelable) event.preventDefault();
+    }, { passive: false });
+  }
+}
+
 export function bindContentScrollGuard(win = window) {
   if (!isIosStandalone(win)) return;
   const main = win.document.querySelector(".app-main");
