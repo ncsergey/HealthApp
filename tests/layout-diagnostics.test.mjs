@@ -13,7 +13,11 @@ function eventTarget() {
       listeners.get(type).add(callback);
     },
     removeEventListener(type, callback) { listeners.get(type)?.delete(callback); },
-    dispatch(type, target = this) { for (const callback of [...listeners.get(type) || []]) callback({ type, target }); }
+    dispatch(type, target = this, properties = {}) {
+      const event = { type, target, cancelable: true, defaultPrevented: false, isTrusted: false, ...properties };
+      for (const callback of [...listeners.get(type) || []]) callback(event);
+      return event;
+    }
   };
 }
 
@@ -23,7 +27,8 @@ function fixture() {
   const timers = new Map();
   const styles = { position: "relative", top: "auto", bottom: "auto", overflow: "hidden", overflowX: "hidden", overflowY: "auto", overscrollBehaviorY: "contain", transform: "none", paddingTop: "0px", paddingRight: "0px", paddingBottom: "0px", paddingLeft: "0px", getPropertyValue: () => "0px" };
   const surface = (tagName = "DIV") => ({
-    tagName, style: { getPropertyValue: () => "0px" }, styles: { ...styles }, dataset: {}, classList: { contains: () => false },
+    tagName, style: { getPropertyValue: () => "0px" }, styles: { ...styles, touchAction: "auto" }, pseudoStyles: {}, dataset: {},
+    classList: { values: new Set(), contains(name) { return this.values.has(name); } },
     scrollTop: 0, scrollLeft: 0, scrollHeight: 1000, scrollWidth: 375, clientHeight: 647, clientWidth: 375,
     rect: { top: 0, right: 375, bottom: 647, left: 0, width: 375, height: 647 },
     getBoundingClientRect() { return { ...this.rect }; }, attributes: {},
@@ -57,7 +62,7 @@ function fixture() {
     CSS: { supports: () => true },
     visualViewport: { ...eventTarget(), width: 375, height: 647, offsetTop: 0, offsetLeft: 0, pageTop: 0, pageLeft: 0, scale: 1 },
     matchMedia: (query) => query === "(orientation: portrait)" ? orientation : { matches: true },
-    getComputedStyle: (node) => node.styles,
+    getComputedStyle: (node, pseudo) => pseudo ? node.pseudoStyles[pseudo] || {} : node.styles,
     setTimeout(fn, delay) { const id = ++timerId; timers.set(id, { fn, time: now + delay }); return id; },
     clearTimeout: (id) => timers.delete(id),
     setInterval(fn, delay) { const id = ++timerId; timers.set(id, { fn, time: now + delay, interval: delay }); return id; },
@@ -128,7 +133,7 @@ test("viewport probes keep raw browser geometry separate from requested sizing a
   advance(100);
   const report = logger.report();
   const sample = report.samples.at(-1);
-  assert.equal(report.schemaVersion, 2);
+  assert.equal(report.schemaVersion, 3);
   assert.equal(sample.viewportProbes.dvh.requestedHeight, "100dvh");
   assert.equal(sample.viewportProbes.dvh.computedHeight, "667px");
   assert.equal(sample.viewportProbes.dvh.rect.height, 667);
@@ -203,15 +208,106 @@ test("touch movement is sampled even without scroll events, with high-frequency 
   assert.equal(logger.status().count, 1);
   advance(1);
   assert.equal(logger.status().count, 2);
-  assert.deepEqual(logger.report().samples[1].reasons, ["touchmove", "visual-viewport-scroll"]);
+  const sample = logger.report().samples[1];
+  assert.deepEqual(new Set(sample.reasons), new Set(["touchmove", "visual-viewport-scroll"]));
+  assert.equal(sample.inputEvents.length, logger.report().limits.maxInputEventsPerSample);
+  assert.equal(sample.inputEventsDropped, 200 - sample.inputEvents.length);
+  logger.stop();
+});
+
+test("classes, touch-action and both scrollbar styles are sampled again after layout changes", () => {
+  const { logger, doc, nodes, win, advance } = fixture();
+  const elements = [doc.documentElement, doc.body, nodes[".app-main"]];
+  for (const element of elements) {
+    element.styles.scrollbarWidth = "none";
+    element.styles.touchAction = "pan-x";
+    element.pseudoStyles["::-webkit-scrollbar"] = { display: "none", width: "0px", height: "0px", visibility: "visible", opacity: "1" };
+    element.pseudoStyles["::-webkit-scrollbar-thumb"] = { display: "inline", backgroundColor: "rgba(0, 0, 0, 0)" };
+  }
+  doc.documentElement.classList.values.add("ios-standalone-viewport");
+  doc.documentElement.classList.values.add("app-content-fits");
+  doc.documentElement.classList.values.add("PRIVATE MEDICAL TEXT");
+  nodes[".app-main"].classList.values.add("content-fits");
+  logger.start();
+  const sample = logger.report().baseline;
+  assert.equal(sample.document.root.classes["ios-standalone-viewport"], true);
+  assert.equal(sample.document.root.classes["app-content-fits"], true);
+  assert.equal(sample.layout.main.classes["content-fits"], true);
+  for (const metric of [sample.document.root, sample.document.body, sample.layout.main]) {
+    assert.equal(metric.touchAction, "pan-x");
+    assert.equal(metric.scrollbar.width, "none");
+    assert.equal(metric.scrollbar.webkitScrollbar.readable, true);
+    assert.equal(metric.scrollbar.webkitScrollbar.display, "none");
+    assert.equal(metric.scrollbar.webkitScrollbarThumb.backgroundColor, "rgba(0, 0, 0, 0)");
+  }
+  nodes[".app-main"].classList.values.delete("content-fits");
+  nodes[".app-main"].styles.scrollbarWidth = "auto";
+  nodes[".app-main"].pseudoStyles["::-webkit-scrollbar"].display = "inline";
+  win.dispatch("resize");
+  advance(100);
+  const next = logger.report().samples.at(-1).layout.main;
+  assert.equal(next.classes["content-fits"], false);
+  assert.equal(next.scrollbar.width, "auto");
+  assert.equal(next.scrollbar.webkitScrollbar.display, "inline");
+  assert.equal(sample.layout.main.scrollbar.webkitScrollbar.display, "none", "The baseline must remain immutable");
+  assert.doesNotMatch(JSON.stringify(logger.report()), /PRIVATE MEDICAL TEXT/);
+  logger.stop();
+});
+
+test("unavailable scrollbar properties and pseudo styles remain unknown without breaking diagnostics", () => {
+  const { logger, win } = fixture();
+  const originalComputedStyle = win.getComputedStyle;
+  win.CSS.supports = () => false;
+  win.getComputedStyle = (node, pseudo) => {
+    if (pseudo) throw new Error("Pseudo-element styles are unavailable");
+    return originalComputedStyle(node);
+  };
+  logger.start();
+  const report = logger.report();
+  assert.equal(report.environment.cssSupport.scrollbarWidth, false);
+  assert.equal(report.environment.cssSupport.webkitScrollbarSelector, false);
+  for (const metric of [report.baseline.document.root, report.baseline.document.body, report.baseline.layout.main]) {
+    assert.equal(metric.scrollbar.width, null);
+    assert.equal(metric.scrollbar.webkitScrollbar.readable, false);
+    assert.equal(metric.scrollbar.webkitScrollbar.display, null);
+    assert.equal(metric.scrollbar.webkitScrollbarThumb.readable, false);
+  }
+  assert.equal(report.errors, 0);
+  logger.stop();
+});
+
+test("gesture cancellation is read after dispatch, with target and cancelability kept separate", () => {
+  const { logger, doc, nodes, advance } = fixture();
+  logger.start();
+  const move = doc.dispatch("touchmove", nodes[".app-main"], { touches: [{}] });
+  // The application handles the event after our capture listener returns.
+  move.defaultPrevented = true;
+  doc.dispatch("touchmove", doc.activeElement, { cancelable: false, touches: [{}] });
+  advance(100);
+  const events = logger.report().samples.at(-1).inputEvents;
+  assert.equal(events.length, 2);
+  assert.equal(events[0].target.surface, "main");
+  assert.equal(events[0].cancelable, true);
+  assert.equal(events[0].defaultPreventedAtCapture, false);
+  assert.equal(events[0].defaultPreventedAfterDispatch, true);
+  assert.equal(events[0].touchCount, 1);
+  assert.equal(events[1].target.tagName, "INPUT");
+  assert.equal(events[1].cancelable, false);
+  assert.equal(events[1].defaultPreventedAfterDispatch, false);
+  assert.doesNotMatch(JSON.stringify(logger.report()), /PRIVATE MEDICAL TEXT|healthData/);
+  doc.dispatch("touchstart");
+  logger.stop();
+  logger.start();
+  advance(100);
+  assert.deepEqual(logger.report().samples.flatMap((sample) => sample.inputEvents), [], "Deferred results must not leak into a new recording");
   logger.stop();
 });
 
 test("a full buffer retains chronological recent samples and the original baseline", () => {
-  const { logger, doc } = fixture();
+  const { logger, doc, advance } = fixture();
   logger.start();
   const limit = logger.report().limits.maxSamples;
-  for (let i = 0; i < limit + 7; i++) doc.dispatch("touchstart");
+  for (let i = 0; i < limit + 7; i++) { doc.dispatch("touchstart"); advance(0); }
   logger.stop();
   const report = logger.report();
   assert.equal(report.samples.length, limit);

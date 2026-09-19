@@ -212,11 +212,54 @@ async function verifyShortContent(page, gap) {
   await verifyContentMode(page, true);
 }
 
+async function verifyDiagnosticReport(page) {
+  const report = await page.evaluate(() => {
+    window.testDiagnostics.stop();
+    return window.testDiagnostics.report();
+  });
+  assert.equal(report.schemaVersion, 3);
+  assert.equal(report.errors, 0);
+  assert.equal(report.environment.cssSupport.webkitScrollbarSelector, true);
+  assert.deepEqual(report.probeImpact.beforeInsertion, report.probeImpact.afterInsertion);
+  assert.deepEqual(report.probeImpact.beforeRemoval, report.probeImpact.afterRemoval);
+  const short = report.samples.find((sample) => sample.layout.main.classes["content-fits"]);
+  assert.ok(short, "A recording must capture the short-screen hiding state");
+  assert.equal(short.document.root.classes["app-content-fits"], true);
+  assert.equal(short.document.root.classes["ios-standalone-viewport"], true);
+  for (const metric of [short.document.root, short.document.body, short.layout.main]) {
+    assert.equal(metric.scrollbar.webkitScrollbar.readable, true);
+    assert.equal(metric.scrollbar.webkitScrollbar.display, "none");
+    assert.equal(metric.scrollbar.webkitScrollbarThumb.readable, true);
+    assert.equal(typeof metric.touchAction, "string");
+  }
+  assert.equal(short.layout.main.touchAction, "pan-x");
+  const long = report.samples.find((sample) => !sample.layout.main.classes["content-fits"] && sample.layout.main.scrollHeight > sample.layout.main.clientHeight);
+  assert.ok(long, "A recording must capture the return to a scrollable list");
+  assert.equal(long.document.root.classes["app-content-fits"], false);
+  assert.notEqual(long.layout.main.scrollbar.webkitScrollbar.display, "none");
+  const events = report.samples.flatMap((sample) => sample.inputEvents);
+  assert.ok(events.some((event) => event.type === "touchmove" && event.target.surface === "main" && event.cancelable && event.defaultPreventedAtCapture === false && event.defaultPreventedAfterDispatch === true), "Application cancellation must be observed after the capture phase");
+  assert.ok(events.some((event) => event.type === "touchmove" && event.target.surface === "main" && event.isTrusted && event.defaultPreventedAfterDispatch === false), "Native content scrolling must be reported as allowed");
+  const stopped = events.find((event) => event.type === "wheel");
+  assert.equal(stopped.defaultPreventedAtCapture, false);
+  assert.equal(stopped.defaultPreventedAfterDispatch, true, "Stopping propagation must not hide cancellation from the logger");
+}
+
 try {
   browser = await chromium.launch({ ...(executablePath ? { executablePath } : {}), headless: true });
   const { context, page } = await createPage();
+  await page.evaluate(async () => {
+    const { createLayoutDiagnostics } = await import("./js/layout-diagnostics.js");
+    window.testDiagnostics = createLayoutDiagnostics();
+  });
   for (const interfaceName of ["classic", "modern"]) {
     await page.evaluate((value) => { document.documentElement.dataset.interface = value; }, interfaceName);
+    await page.evaluate(() => {
+      window.testDiagnostics.start();
+      const main = document.querySelector(".app-main");
+      main.addEventListener("wheel", (event) => { event.preventDefault(); event.stopPropagation(); }, { once: true, passive: false });
+      main.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: 40 }));
+    });
     const gap = interfaceName === "modern" ? 12 : 0;
     for (const [width, layoutHeight, height, offsetTop] of [[375, 647, 647, 0], [667, 375, 375, 0], [375, 667, 667, 0], [375, 667, 647, 20]]) {
       await page.setViewportSize({ width, height: layoutHeight });
@@ -267,7 +310,9 @@ try {
     const restored = await viewportEvent(page, { height: 647, offsetTop: 20 });
     assert.equal(restored.keyboard, false);
     verifyBounds(restored, 647, gap, `${interfaceName} keyboard close`);
+    await verifyDiagnosticReport(page);
     console.log(`PASS ${interfaceName}: rotation, four screens, panel drag guard, short content and edges locked, long content swipe, touch taps, intermediate offsets, preserved inner scroll, resume, keyboard`);
+    console.log(`PASS ${interfaceName}: diagnostic classes, scrollbar styles and final cancellation, including stopped propagation and native touch events`);
   }
   await context.close();
   for (const [label, userAgent, standalone] of [["iOS browser", iosAgent, false], ["Android PWA", "Mozilla/5.0 (Linux; Android 13) Chrome/120 Mobile Safari/537.36", true]]) {

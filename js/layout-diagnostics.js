@@ -1,6 +1,8 @@
 const SAMPLE_INTERVAL_MS = 100;
 const MAX_SAMPLES = 2400;
 const MAX_DURATION_MS = 10 * 60 * 1000;
+const MAX_INPUT_EVENTS_PER_SAMPLE = 32;
+const LAYOUT_CLASSES = ["ios-standalone-viewport", "app-content-fits", "content-fits"];
 const SURFACES = {
   shell: ".app-shell", headerAnchor: ".top-chrome-anchor", header: ".app-header",
   main: ".app-main", content: ".app-content", footerAnchor: ".bottom-chrome-anchor", footer: ".bottom-nav"
@@ -12,6 +14,19 @@ const PROBE_HEIGHTS = {
 const PROBE_STYLE = "position:fixed;top:0;bottom:auto;left:0;right:auto;width:0;min-width:0;max-width:none;height:0;min-height:0;max-height:none;margin:0;border:0;padding:0;box-sizing:border-box;visibility:hidden;pointer-events:none;overflow:hidden;transform:none";
 
 const number = (value) => Number.isFinite(value) ? Math.round(value * 100) / 100 : null;
+const boolean = (value) => typeof value === "boolean" ? value : null;
+
+function supportsCss(win, ...args) {
+  try { return win.CSS?.supports ? win.CSS.supports(...args) : null; } catch { return null; }
+}
+
+function scrollbarPseudoStyle(win, element, pseudo) {
+  let style;
+  try { style = win.getComputedStyle(element, pseudo); } catch { /* Some engines cannot expose these pseudo-elements. */ }
+  const values = Object.fromEntries(["display", "width", "height", "visibility", "opacity", "backgroundColor"].map((key) => [key, style?.[key] || null]));
+  // Returned CSS is not evidence that a native iOS indicator is actually hidden.
+  return { readable: Object.values(values).some((value) => value !== null), ...values };
+}
 
 function rectangle(element) {
   if (!element) return null;
@@ -24,7 +39,7 @@ function scrollMetrics(element) {
   return Object.fromEntries(["scrollTop", "scrollLeft", "scrollHeight", "scrollWidth", "clientHeight", "clientWidth"].map((key) => [key, number(element[key])]));
 }
 
-function surfaceMetrics(win, element) {
+function surfaceMetrics(win, element, includeScrollbars = false) {
   if (!element) return null;
   const style = win.getComputedStyle(element);
   return {
@@ -32,10 +47,36 @@ function surfaceMetrics(win, element) {
     ...Object.fromEntries([
       "position", "top", "bottom", "height", "minHeight", "maxHeight", "boxSizing",
       "overflowX", "overflowY", "transform", "filter", "perspective", "contain", "willChange",
-      "paddingTop", "paddingBottom"
+      "paddingTop", "paddingBottom", "touchAction"
     ].map((key) => [key, style[key] || null])),
-    overscrollY: style.overscrollBehaviorY || null
+    overscrollY: style.overscrollBehaviorY || null,
+    ...(includeScrollbars ? {
+      classes: Object.fromEntries(LAYOUT_CLASSES.map((name) => [name, element.classList.contains(name)])),
+      scrollbar: {
+        width: style.scrollbarWidth || null, color: style.scrollbarColor || null, gutter: style.scrollbarGutter || null,
+        webkitScrollbar: scrollbarPseudoStyle(win, element, "::-webkit-scrollbar"),
+        webkitScrollbarThumb: scrollbarPseudoStyle(win, element, "::-webkit-scrollbar-thumb")
+      }
+    } : {})
   };
+}
+
+function inputTarget(win, target) {
+  const doc = win.document;
+  if (!target?.tagName) target = target?.parentElement || target;
+  let surface = "other";
+  if (target === doc) surface = "document";
+  else if (target === doc.documentElement) surface = "html";
+  else if (target === doc.body) surface = "body";
+  else if (target?.closest?.("dialog")) surface = "dialog";
+  else {
+    for (const name of ["header", "footer", "main", "shell"]) {
+      const element = doc.querySelector(SURFACES[name]);
+      if (element && (target === element || element.contains?.(target))) { surface = name; break; }
+    }
+  }
+  // Never serialize arbitrary IDs, classes, text or input values from a target.
+  return { surface, tagName: target?.tagName || null };
 }
 
 function createProbes(win) {
@@ -109,7 +150,7 @@ function snapshot(win, probes) {
   for (const [name, selector] of Object.entries(SURFACES)) {
     const element = doc.querySelector(selector);
     if (!element) continue;
-    layout[name] = surfaceMetrics(win, element);
+    layout[name] = surfaceMetrics(win, element, name === "main");
   }
   return {
     view: doc.querySelector("section.view:not([hidden])")?.id || null,
@@ -127,7 +168,7 @@ function snapshot(win, probes) {
     viewportCss: Object.fromEntries(["height", "offset-top", "bottom"].map((key) => [key, rootStyle.getPropertyValue(`--visual-viewport-${key}`).trim()])),
     viewportProbes,
     document: {
-      root: surfaceMetrics(win, root), body: surfaceMetrics(win, doc.body), scrollingElement: scrollMetrics(doc.scrollingElement),
+      root: surfaceMetrics(win, root, true), body: surfaceMetrics(win, doc.body, true), scrollingElement: scrollMetrics(doc.scrollingElement),
       scrollingElementTag: doc.scrollingElement?.tagName || null,
       htmlOverflow: rootStyle.overflow, bodyOverflow: win.getComputedStyle(doc.body).overflow,
       visibility: doc.visibilityState
@@ -164,6 +205,8 @@ export function createLayoutDiagnostics({ window: win = globalThis.window, getAp
   let probes = null;
   let probeImpact = null;
   let metadata = null;
+  let inputEvents = [];
+  let inputEventsDropped = 0;
   const pendingReasons = new Set();
   const timers = new Set();
   const rotationTimers = new Set();
@@ -179,11 +222,12 @@ export function createLayoutDiagnostics({ window: win = globalThis.window, getAp
     pendingReasons.clear();
     const now = win.performance.now();
     try {
-      const sample = { sequence: ++sequence, elapsedMs: number(now - startTime), reasons, ...snapshot(win, probes) };
+      const sample = { sequence: ++sequence, elapsedMs: number(now - startTime), reasons, inputEvents, inputEventsDropped, ...snapshot(win, probes) };
       baseline ||= sample;
       if (samples.length < MAX_SAMPLES) samples.push(sample);
       else { samples[nextIndex] = sample; nextIndex = (nextIndex + 1) % MAX_SAMPLES; dropped += 1; }
     } catch { errors += 1; }
+    inputEvents = []; inputEventsDropped = 0;
     lastSampleTime = now;
   }
 
@@ -197,6 +241,27 @@ export function createLayoutDiagnostics({ window: win = globalThis.window, getAp
   function later(reason, delay, group = timers) {
     const timer = win.setTimeout(() => { group.delete(timer); capture(reason); }, delay);
     group.add(timer);
+  }
+
+  function observeInput(event) {
+    const observation = {
+      type: event.type, elapsedMs: number(win.performance.now() - startTime),
+      target: inputTarget(win, event.target), touchCount: number(event.touches?.length),
+      isTrusted: boolean(event.isTrusted), cancelable: boolean(event.cancelable),
+      defaultPreventedAtCapture: boolean(event.defaultPrevented)
+    };
+    // A new task runs after all capture/target/bubble handlers, even when one
+    // stops propagation. A microtask inside a native listener can run too soon.
+    const timer = win.setTimeout(() => {
+      timers.delete(timer);
+      if (!recording) return;
+      observation.defaultPreventedAfterDispatch = boolean(event.defaultPrevented);
+      if (inputEvents.length === MAX_INPUT_EVENTS_PER_SAMPLE) { inputEvents.shift(); inputEventsDropped += 1; }
+      inputEvents.push(observation);
+      if (event.type === "touchmove" || event.type === "wheel") queue(event.type);
+      else { capture(event.type); later(`${event.type}+350ms`, 350); }
+    }, 0);
+    timers.add(timer);
   }
 
   function rotation(reason) {
@@ -231,6 +296,7 @@ export function createLayoutDiagnostics({ window: win = globalThis.window, getAp
   function start() {
     if (recording) return;
     samples = []; nextIndex = 0; dropped = 0; sequence = 0; errors = 0; baseline = null;
+    inputEvents = []; inputEventsDropped = 0;
     pendingReasons.clear(); lastSampleTime = -Infinity;
     startedAt = new Date().toISOString(); stoppedAt = null; startTime = win.performance.now();
     const doc = win.document;
@@ -238,7 +304,13 @@ export function createLayoutDiagnostics({ window: win = globalThis.window, getAp
       userAgent: win.navigator.userAgent, platform: win.navigator.platform, maxTouchPoints: win.navigator.maxTouchPoints,
       standalone: win.navigator.standalone === true || win.matchMedia("(display-mode: standalone)").matches,
       viewportMeta: doc.querySelector('meta[name="viewport"]')?.content || null,
-      statusBarStyle: doc.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')?.content || null
+      statusBarStyle: doc.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')?.content || null,
+      cssSupport: {
+        scrollbarWidth: supportsCss(win, "scrollbar-width", "none"),
+        webkitScrollbarSelector: supportsCss(win, "selector(::-webkit-scrollbar)"),
+        webkitScrollbarThumbSelector: supportsCss(win, "selector(::-webkit-scrollbar-thumb)"),
+        touchActionPanX: supportsCss(win, "touch-action", "pan-x")
+      }
     };
     probeImpact = { beforeInsertion: probeImpactSnapshot(win) };
     probes = createProbes(win);
@@ -256,8 +328,8 @@ export function createLayoutDiagnostics({ window: win = globalThis.window, getAp
     listen(win.visualViewport, "resize", () => queue("visual-viewport-resize"));
     listen(win.visualViewport, "scroll", () => queue("visual-viewport-scroll"));
     listen(doc, "scroll", (event) => queue(event.target === doc.querySelector(".app-main") ? "main-scroll" : "document-or-nested-scroll"));
-    for (const type of ["touchmove", "wheel"]) listen(doc, type, () => queue(type));
-    for (const type of ["touchstart", "touchend", "touchcancel", "click", "focusin", "focusout"]) {
+    for (const type of ["touchstart", "touchmove", "touchend", "touchcancel", "wheel"]) listen(doc, type, observeInput);
+    for (const type of ["click", "focusin", "focusout"]) {
       listen(doc, type, () => { capture(type); later(`${type}+350ms`, 350); });
     }
     listen(doc, "visibilitychange", () => capture("visibilitychange"));
@@ -274,10 +346,10 @@ export function createLayoutDiagnostics({ window: win = globalThis.window, getAp
   function report() {
     const info = getAppInfo();
     return {
-      format: "myhealth-layout-diagnostics", schemaVersion: 2, exportedAt: new Date().toISOString(),
+      format: "myhealth-layout-diagnostics", schemaVersion: 3, exportedAt: new Date().toISOString(),
       app: { version: info?.version || null, buildDate: info?.buildDate || null },
       environment: metadata, ...status(),
-      limits: { maxSamples: MAX_SAMPLES, eventSampleIntervalMs: SAMPLE_INTERVAL_MS, maxDurationMs: MAX_DURATION_MS },
+      limits: { maxSamples: MAX_SAMPLES, eventSampleIntervalMs: SAMPLE_INTERVAL_MS, maxDurationMs: MAX_DURATION_MS, maxInputEventsPerSample: MAX_INPUT_EVENTS_PER_SAMPLE },
       baseline,
       probeImpact,
       samples: nextIndex ? [...samples.slice(nextIndex), ...samples.slice(0, nextIndex)] : samples.slice()
@@ -287,6 +359,7 @@ export function createLayoutDiagnostics({ window: win = globalThis.window, getAp
   function clear() {
     stop();
     samples = []; baseline = null; metadata = null; probeImpact = null; nextIndex = 0; dropped = 0; errors = 0; startedAt = null; stoppedAt = null;
+    inputEvents = []; inputEventsDropped = 0;
     onStatusChange(status());
   }
 
